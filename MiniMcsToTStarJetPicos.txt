@@ -1,0 +1,19 @@
+To produce picos from minimcs and MuDsts from TStarJetPicoMaker/ (in my home directory on RCF)
+	*make a list of minimcs and a list of MuDsts:
+		command for making the really full list AND HAVE IT SORTED: find "$PWD" -type f | sort > ~/TStarJetPicoMaker/<name_of_list>.list
+		command for separating Mudsts and minimcs: sed '/minimc/! d' <name_of_list>.list >> <minimc_list_name>.list and similar for MuDsts
+	*split each list into an equal number of files/lines
+		use the "split" command. E.g. "split --suffix-length=2 --numeric-suffixes --lines=100 --additional-suffix=.list --verbose <input_filename> <output_prefix>_" to split into a number of files with 100 lines each or replace --lines=100 with e.g. -n l/5 to split evenly into 5 files.
+	*change the filename base in macros/MakeTStarJetPico_example.cxx (around line 100 currently) if your lists have a different structure than e.g. MuDsts1115_00 where 1115 denotes the pT-hat range and 00 is the first list of, say, 100 MuDsts. If it's different, you'll probably need to rewrite this whole block. Just test it in an interpreter, e.g. a root environment until you get a sensible value for "std::string unique_name".
+
+	*change the call to macros/MakeTStarJetPico_example.cxx in submit/jetPicoProduction_example.xml to match that number of lines (nominally I have 100 files per job so there will probably be a 100 as the penultimate argument to be changed to suit your desired job size)
+
+	*In submit/submit.py, adjust "find_mu" and "find_mc" to match the lists of files you're inputting, and update slice_name so the xml script knows the name of the files it's copying over from $SCRATCH to local. The way slice_name is coded right now, you should be careful if you have lists like "minimcs1115.list" before you split them into 100 lines each, as above. The python looks for "minimcs", so name these ones instead something like "minimc1115.list" so you don't double-count.
+
+	*Also in submit/submit.py, adjust the default arguments to suit your case, so the defaults will work and won't have to be input.
+	
+	*once the above is adjusted, a simple "python submit/submit.py" will use the xml script n times, where n is the number of lists of input minimcs or MuDsts
+
+	*note: if you adjust anything in StRoot/TStarJetPicoMaker/ remember to run a ./macros/compile.csh
+
+	*make sure the directory log/tmplogs exists and exists where the submit script thinks it is or it will try to submit jobs until the very end, then fail.

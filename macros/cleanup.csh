@@ -17,8 +17,8 @@ rm -rv scheduler/list/*
 rm -rv scheduler/report/* 
 rm -rv ZIPy14* 
 rm -rv *package
-rm -rv logs/* 
-rm -rv *.so 
+rm -rv out/logs/* 
+rm -rv out/tmplogs/*
+rm -rv libs/*.so 
 rm -rv *.tmp 
 rm -rv *.zip
-

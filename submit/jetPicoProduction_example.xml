@@ -1,16 +1,14 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<!DOCTYPE note [
+<?xml version="1.0" encoding="utf-8"?>
+<!--<!DOCTYPE note [
 <!ENTITY NFILES "all">
-<!ENTITY MACRO "MakeTStarJetPico.cxx">
-<!ENTITY DAYNR "101-105">
-<!ENTITY PROD "P17id">
-<!ENTITY TRGSETUP "AuAu_200_production_mid_2014">
-<!ENTITY FILETYPE "daq_reco_MuDst">
-<!ENTITY ROOTDIR "">
-<!ENTITY OUTDIR "">
+<!ENTITY MACRO "MakeTStarJetPico_example.cxx">
+<!ENTITY ROOTDIR "/star/u/imooney/TStarJetPicoMaker">
+<!ENTITY OUTDIR "/star/u/imooney/TStarJetPicoMaker/out">
+<!ENTITY INPUT "/star/u/imooney/TStarJetPicoMaker/list/MuDsts2535.list">
+<!ENTITY INPUTMC "/star/u/imooney/TStarJetPicoMaker/list/minimcs2535.list">
 <!ENTITY TRIGGERS "0">
 ]>
-
+-->
 <!--             STAR Collaboration - Nick Elsey             -->
 <!--
  Script to query STAR catalogue and split the resulting
@@ -45,15 +43,20 @@
  
  TRIGGERS:   the set of triggers the Maker will reproduce: the mapping
              between this index & trigger set is defined in the root macro
- 
+	     
  -->
 
-<job fileListSyntax="xrootd" inputOrder="runnumber" splitBy="runnumber" maxEvents="15000" simulateSubmission="false">
+<job> 
 
- <command>
-    setenv LOG &OUTDIR;/&TRGSETUP;/logs/log/trigger_set_&TRIGGERS;/&DAYNR;
-    setenv ERR &OUTDIR;/&TRGSETUP;/logs/err/trigger_set_&TRIGGERS;&DAYNR;
-    setenv OUT &OUTDIR;/&TRGSETUP;/out/trigger_set_&TRIGGERS;/&DAYNR;
+  <command>
+    <!-- set TRIGGERS=0 -->
+
+    ls 
+    setenv LOG &out;<!--/&TRGSETUP;-->/log<!--&TRIGGERS-->;<!--/&DAYNR;-->
+    setenv ERR &out;<!--/&TRGSETUP;-->/err<!--&TRIGGERS-->;<!--&DAYNR;-->
+    setenv OUT &out;<!--/&TRGSETUP;-->/out<!--&TRIGGERS-->;<!--/&DAYNR;-->
+    <!--setenv ROOTDIR /star/u/imooney/TStarJetPicoMaker-->
+    <!--set MACRO="MakeTStarJetPico_example.cxx"-->
 
     mkdir StRoot
     mv StRefMultCorr StRoot/
@@ -62,35 +65,40 @@
     mkdir -p $ERR
     mkdir -p $OUT
 
-    starver pro
-    root4star -q -b &MACRO;\(1e9,\"$FILELIST\",\"$JOBID\",$INPUTFILECOUNT,\&TRIGGERS;\)
-
-    mv $SCRATCH/*.root $OUT/
+    starver SL22a 
     
-    zip $LOG/$JOBID.out.zip &OUTDIR;/tmplogs/$JOBID.log
-    zip $ERR/$JOBID.err.zip &OUTDIR;/tmplogs/$JOBID.err
-    rm &OUTDIR;/&TRGSETUP;/tmplogs/$JOBID.*
+    root4star -q -b MakeTStarJetPico_example.cxx\(1e9,\"\&mulist;\",\"\&mclist;\",\"$JOBID\",1e9,0\)
+    ls
+    <!--zip $LOG/$JOBID.out.zip &log;/tmplogs/$JOBID.log
+    zip $ERR/$JOBID.err.zip &log;/tmplogs/$JOBID.err-->
 	
  </command>
 
+ <stdout URL="file:&log;/$JOBID.log" />
+ <stderr URL="file:&log;/$JOBID.err" />
+ <!-- "$JOBID/&outfile;.root -->
+ <output fromScratch="*.root" toURL="file:&out;/" />
+ <!--<input URL="file:&INPUT;"/>
+ <input URL="file:&INPUTMC;"/>
+ -->
+
  <SandBox installer="ZIP">
-	 <Package name="AuAu14Pico_&TRGSETUP;_&DAYNR;">
-                <File>file:&ROOTDIR;/macros/&MACRO;</File>
-                <File>file:&ROOTDIR;/libs/libTStarJetPico.so</File>
-                <File>file:&ROOTDIR;/libs/libTStarJetPicoMaker.so</File>
-                <File>file:&ROOTDIR;/libs/libStRefMultCorr.so</File>
-                <File>file:&ROOTDIR;/StRoot/StRefMultCorr/</File>
+	 <Package name="pp12Pico"><!--_&TRGSETUP;_&DAYNR;">-->
+                <File>file:/gpfs01/star/pwg/youqi/TStarJetPicoMaker/macros/MakeTStarJetPico_example.cxx</File>
+                <!--<File>file:/star/u/imooney/TStarJetPicoMaker/libs/libStRefMultCorr.so</File>
+                <File>file:/star/u/imooney/TStarJetPicoMaker/libs/libTStarJetPico.so</File>
+		<File>file:/star/u/imooney/TStarJetPicoMaker/libs/libTStarJetPicoMaker.so</File>-->
+		<File>file:/gpfs01/star/pwg/youqi/TStarJetPicoMaker/libs/libTStarJetPico.so</File>
+                <File>file:/gpfs01/star/pwg/youqi/TStarJetPicoMaker/libs/libTStarJetPicoMaker.so</File>
+ 		<File>file:/gpfs01/star/pwg/youqi/TStarJetPicoMaker/libs/libStRefMultCorr.so</File>
+                <File>file:/gpfs01/star/pwg/youqi/TStarJetPicoMaker/StRoot/StRefMultCorr/</File>
          </Package>
  </SandBox>
  
  <Generator>
-   <Location>&ROOTDIR;/scheduler/report/</Location>
-   <ScriptLocation>&ROOTDIR;/scheduler/csh/</ScriptLocation>
-   <ListLocation>&ROOTDIR;/scheduler/list/</ListLocation>
+   <Location><!--&ROOTDIR;-->/gpfs01/star/pwg/youqi/TStarJetPicoMaker/scheduler/report/</Location>
+   <ScriptLocation><!--&ROOTDIR;-->/gpfs01/star/pwg/youqi/TStarJetPicoMaker/scheduler/csh/</ScriptLocation>
+   <ListLocation><!--&ROOTDIR;-->/gpfs01/star/pwg/youqi/TStarJetPicoMaker/scheduler/list/</ListLocation>
  </Generator>
-
- <stdout URL="file:&OUTDIR;/tmplogs/$JOBID.log" />
- <stderr URL="file:&OUTDIR;/tmplogs/$JOBID.err" />
- <input singleCopy="true" URL="catalog:star.bnl.gov?sanity=1,trgsetupname=&TRGSETUP;,production=&PROD;,filetype=&FILETYPE;,daynumber[]&DAYNR;,storage!=hpss" nFiles="&NFILES;" />
 
 </job>

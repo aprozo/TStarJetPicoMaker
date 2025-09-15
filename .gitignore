@@ -1,4 +1,6 @@
 # ignore lists for git
+list_*/
+sandbox/
 
 # that weird crap emacs generates
 *~
