@@ -69,24 +69,16 @@ struct BemcMatch {
 class TStarJetPicoMaker : public StMaker {
   
 public:
-  /* enum runMode { mode_MC, mode_Dst }; */
-  enum inputMode{ NotSet=0, InputMuDst=1, InputPicoDst=2};
+  enum inputMode{NotSet=0, InputMuDst=1, InputPicoDst=2};
   enum vertexMode{VpdOrRank=0, Vpd=1, Rank=2};
   enum towerMode{AcceptAllTowers=0, RejectBadTowerStatus=1};
   enum refMultCorrectionMode{FillNone=0, FillGRefAndRefMultCorr=1, FillGRefMultCorr=2, FillGRefMultCorrP16ID=3, FillGRefMultCorrVPDMB30=4, FillGRefMultCorrVPDNoVtx=5, FillRefMultCorr=6};
   
-  int mlog_verbose = 10;
   /* if input mode is not set by user, the reader will search the chain
      for a muDst or picoDst - if both are present for some
      reason, it will error out.
    */
-  /* runMode mRunMode; // note mMakeMC = (mRunMode == mode_MC); */
-  /* bool isRunModeMC; // redundant with mRunMode == mode_MC; */
-
-
-  TStarJetPicoMaker(std::string outFileName, TChain *mcTree=nullptr, 
-          inputMode input = NotSet, std::string name = "TStarJetPicoMaker", 
-          int nFiles = 1, int trigSet = 0);
+  TStarJetPicoMaker(std::string outFileName, TChain *mcTree, inputMode input = NotSet, std::string name = "TStarJetPicoMaker", int nFiles = 1, int trigSet = 0);
   ~TStarJetPicoMaker();
     
     // loads a new chain
@@ -109,8 +101,7 @@ public:
      If true, maker expects input to have both monte-carlo & GEANT data,
      and will produce a TTree for each. Currently only works for muDst
    */
-  /* void ProcessMC(bool flag) {mMakeMC = flag; is} */
-  // Note: flag above is automatically set if there are MC_trees
+  void ProcessMC(bool flag) {mMakeMC = flag;}
   
   /*  *********DEPRICATED USE WITH CAUTION*********
         included for backwards compatibility, but
