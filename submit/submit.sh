@@ -6,7 +6,7 @@ listOfFiles="$PWD/$1"
 # strip BASENAME from the path without the extension to get filelist_name range
 filelist_name=$(basename "${listOfFiles}" .list)
 # -- root macro
-rootMacro="MakeTStarJetPico.cxx"
+rootMacro="makeTStarJetPico.cxx"
 # -- production Id
 productionId=$(date +%F)
 # -- set STAR software version
@@ -26,9 +26,11 @@ cd "${jobFolder}"
 mkdir -p report err log list csh production
 
 check=(
-    "StRoot"
-    "/macros/${rootMacro}" # run macro
-    "submit/${templateXml}"      # xml template
+    "libs/libTStarJetPicoMaker.so" # shared library
+    "libs/libTStarJetPico.so" # shared library
+    "libs/libStRefMultCorr.so"     # shared library
+    "macros/${rootMacro}" # run macro
+    "submit/${templateXml}" # xml template
 )
 
 printf "Checking project … "
@@ -38,7 +40,7 @@ for item in "${check[@]}"; do
         echo "$item missing"
         exit 1
     }
-    [[ -d $path || $item == *.xml]] && ln -sf "$path"
+    [[ -d $path || $item == *.xml ]] && ln -sf "$path"
 done
 [[ -e $listOfFiles ]] || {
     echo "$listOfFiles missing"

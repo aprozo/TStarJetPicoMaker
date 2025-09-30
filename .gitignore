@@ -67,3 +67,5 @@ CondorFile
 build/
 temp_gccflags.c
 .consign
+
+/submit/202*

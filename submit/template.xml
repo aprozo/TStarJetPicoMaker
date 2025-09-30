@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<job fileListSyntax="xrootd" maxFilesPerProcess="&maxNFiles;" simulateSubmission="false">
 
-  <!-- <shell>singularity exec -e -B /direct -B /star -B /afs -B /gpfs -B /sdcc/lustre02 /cvmfs/star.sdcc.bnl.gov/containers/rhic_sl7.sif</shell> -->
+<job name="pp2012_embed" fileListSyntax="paths" maxFilesPerProcess="1" simulateSubmission="false">
 
   <stdout URL="file:&jobFolder;/log/$JOBID.out"/>
   <stderr URL="file:&jobFolder;/err/$JOBID.err"/>
 
-  <input URL="filelist:&listOfFiles;" />
+  <input URL="filelist:&baseFolder;/lists/list_of_lists.list" nFiles="all"/>
 
   <Generator>
     <Location>./report/</Location>
@@ -16,7 +15,8 @@
 
   <command>
     starver &starVersion;
-    root4star -l -b -q macros/&rootMacro;\(\"$FILELIST\",\"&filelist_name;_$JOBINDEX\"\) &gt;&amp; ${JOBID}.log
+    ls -ltrh **
+    root4star -l -b -q &rootMacro;\(\"/gpfs01/star/pwg/prozorov/TStarJetPicoMaker/lists/$FILEBASENAME.list\",\"$FILEBASENAME\"\) &gt;&amp; ${JOBID}.log
   </command>
 
   <output fromScratch="*.root" toURL="&jobFolder;/production/" />
@@ -25,7 +25,8 @@
 
   <SandBox installer="ZIP">
     <Package name="LocalLibraries">
-      <File>file:./StRoot/</File>
+      <File>file:&baseFolder;/libs/</File>
+      <File>file:&baseFolder;/macros/&rootMacro;</File>
     </Package>
   </SandBox>
 </job>

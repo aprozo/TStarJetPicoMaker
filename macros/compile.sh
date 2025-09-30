@@ -29,3 +29,6 @@ for lib in libTStarJetPicoMaker.so libStRefMultCorr.so; do
 done
 
 ls -ltr "$LIBDIR"/*.so || true
+
+cd "$WORKDIR"
+root4star -q -b ./macros/makeTStarJetPico.cxx
