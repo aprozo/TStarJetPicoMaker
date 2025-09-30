@@ -11,8 +11,6 @@ rootMacro="makeTStarJetPico.cxx"
 productionId=$(date +%F)
 # -- set STAR software version
 starVersion="pro"
-# --max number of files
-maxNFiles=100
 
 #================================================================
 # -- submission xml file
@@ -59,7 +57,6 @@ cat <<EOF >"${generatedXml}"
 <!ENTITY jobFolder "${jobFolder}">
 <!ENTITY listOfFiles "${listOfFiles}">
 <!ENTITY starVersion "${starVersion}">
-<!ENTITY maxNFiles "${maxNFiles}">
 <!ENTITY filelist_name "${filelist_name}">
 ]>
 

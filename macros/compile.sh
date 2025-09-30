@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKDIR=/gpfs01/star/pwg/prozorov/TStarJetPicoMaker
-cd "$WORKDIR"
+WORKDIR=$PWD
 
 JETPICODIR="$PWD/StRoot/eventStructuredAu"
 BUILDDIR="$PWD/build"
