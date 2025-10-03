@@ -285,8 +285,7 @@ void TStarJetPicoMaker::InitOutput()
    mTree = new TTree("JetTree", " Pico Tree for Jet");
    mTree->Branch("PicoJetTree", "TStarJetPicoEvent", &mEvent);
    mTree->SetAutoSave(100000);
-   if (mMakeMC)
-   {
+   if (mMakeMC) {
       mMCTree = new TTree("JetTreeMc", " Pico Tree for MC Jet");
       mMCTree->Branch("PicoJetTree", "TStarJetPicoEvent", &mMCEvent);
       mMCTree->SetAutoSave(100000);
@@ -922,7 +921,6 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
    bool count_patches = 0;
    for (unsigned jp = 0; jp < 18; ++jp) {
       const Int_t jpAdc = mTriggerSimu->bemc->barrelJetPatchAdc(jp);
-      // hard-coding this for now, will improve later -- ONLY WORKS FOR pA2015 RIGHT NOW!!
 
       if (jp2 > 0 && jpAdc > jp2 && count_patches == 0) {
          // add triggers
@@ -930,33 +928,37 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
          count_patches++;
       }
 
-      std::bitset<32> trigMap = 0;
-
+      std::bitset<32> trigMap; // default = 0
       if (jp0 > 0 && jpAdc > jp0)
          trigMap.set(4);
       if (jp1 > 0 && jpAdc > jp1)
          trigMap.set(5);
       if (jp2 > 0 && jpAdc > jp2)
          trigMap.set(6);
+      if (!trigMap.any())
+         continue;
 
-      if (trigMap.any()) {
-         LOG_DEBUG << "jet patch trigger found. ADC: " << jpAdc << " jet patch: " << jp << endm;
-         Float_t eta, phi;
-         if (jp >= 0 && jp < 6)
-            eta = 0.5;
-         if (jp >= 6 && jp < 12)
-            eta = -0.5;
-         if (jp >= 12 && jp < 18)
-            eta = -0.1;
-         phi = TVector2::Phi_mpi_pi((150 - (jp % 6) * 60) * TMath::DegToRad());
-         trigobj.Clear();
-         trigobj.SetId(jp);
-         trigobj.SetADC(jpAdc);
-         trigobj.SetBitMap(trigMap);
-         trigobj.SetEta(eta);
-         trigobj.SetPhi(phi);
-         mEvent->AddTrigObj(&trigobj);
-      }
+      LOG_DEBUG << "jet patch trigger found. ADC: " << jpAdc << " jet patch: " << jp << endm;
+
+      float eta;
+      if (jp < 6)
+         eta = 0.5f;
+      else if (jp < 12)
+         eta = -0.5f;
+      else
+         eta = -0.1f;
+
+      const int j = jp % 6; // be carefull because jp is unsigned, the sub-expression 150.0- (jp % 6) * 60 is also
+                            // unsigned and when jp=3, it becomes a large positive number
+      const float phi = TVector2::Phi_mpi_pi((150.0 - j * 60.0) * TMath::DegToRad());
+
+      trigobj.Clear();
+      trigobj.SetId(jp);
+      trigobj.SetADC(jpAdc);
+      trigobj.SetBitMap(trigMap);
+      trigobj.SetEta(eta);
+      trigobj.SetPhi(phi);
+      mEvent->AddTrigObj(&trigobj);
    }
 }
 
