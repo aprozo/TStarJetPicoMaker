@@ -78,7 +78,7 @@ public:
      for a muDst or picoDst - if both are present for some
      reason, it will error out.
    */
-  TStarJetPicoMaker(std::string outFileName, TChain *mcTree, inputMode input = NotSet, std::string name = "TStarJetPicoMaker", int nFiles = 1, int trigSet = 0);
+  TStarJetPicoMaker(std::string outFileName, TChain *mcTree=nullptr, inputMode input = NotSet, std::string name = "TStarJetPicoMaker", int nFiles = 1, int trigSet = 0);
   ~TStarJetPicoMaker();
     
     // loads a new chain

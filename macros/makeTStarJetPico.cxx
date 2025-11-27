@@ -1,67 +1,12 @@
 
-#include <iostream>
-#include <fstream>
-#include <string>
+//  Example of how to use TStarJetPicoMaker to produce
+//  a tree of TStarJetPicoEvents
 
-// --- main function ---
-TChain *getMiniMcFromMuDstList(const char *filelist)
-{
-   if (!filelist) {
-      std::cerr << "[getMiniMcFromMuDstList] ERROR: filelist is NULL\n";
-      return 0;
-   }
-
-   std::ifstream in(filelist);
-   if (!in.is_open()) {
-      std::cerr << "[getMiniMcFromMuDstList] ERROR: cannot open list: " << filelist << "\n";
-      return 0;
-   }
-
-   TChain *chain = new TChain("StMiniMcTree");
-
-   std::string line;
-   Long64_t nAdded = 0;
-   Long64_t nLines = 0;
-
-   while (std::getline(in, line)) {
-      ++nLines;
-
-      if (line.empty() || line[0] == '#') {
-         // Skip empty lines and comments
-         continue;
-      }
-      // replace "MuDst.root" with "miniMc.root" at the end of the line
-      const std::string muSuffix = "MuDst.root";
-      const std::string miniSuffix = "minimc.root";
-      if (line.size() < muSuffix.size() || line.substr(line.size() - muSuffix.size()) != muSuffix) {
-         // Did not match the expected suffix; warn and skip
-         std::cerr << "[getMiniMcFromMuDstList] WARN line " << nLines
-                   << ": not a MuDst path (no trailing \"MuDst.root\"): " << line << "\n";
-         continue;
-      }
-
-      std::string miniPath = line.substr(0, line.size() - muSuffix.size()) + miniSuffix;
-
-      // Optional: check that the file exists (ROOT-style); comment out if not desired
-      if (gSystem->AccessPathName(miniPath.c_str())) {
-         std::cerr << "[getMiniMcFromMuDstList] WARN: file not found -> " << miniPath << "\n";
-         continue;
-      }
-
-      chain->Add(miniPath.c_str());
-      ++nAdded;
-   }
-
-   std::cout << "[getMiniMcFromMuDstList] Added " << nAdded << " MiniMc files from " << nLines << " lines in "
-             << filelist << "\n";
-
-   if (nAdded == 0) {
-      std::cerr << "[getMiniMcFromMuDstList] ERROR: no files added; returning NULL\n";
-      delete chain;
-      return 0;
-   }
-   return chain;
-}
+//  this macro produces TStarJetPicoEvents from STAR muDSTs.
+//  Requires the STAR libraries & muDST files. Defaults
+//  are set to a test production using the test.list file
+//  ( 10 files located on distributed disk from y14 high
+//  luminosity production )
 
 void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outputName = "test")
 {
@@ -99,11 +44,6 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    gSystem->Load("libTStarJetPicoMaker.so");
 
    StChain *chain = new StChain("StChain");
-   TChain *mcChain = getMiniMcFromMuDstList(filelist);
-   if (!mcChain) {
-      cout << "No MiniMc chain returned. Exiting." << endl;
-      return;
-   }
 
    StMuDstMaker *muDstMaker = new StMuDstMaker(0, 0, "", filelist, "", nFiles);
 
@@ -132,9 +72,9 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    trigsim->useOnlineDB();
    trigsim->bemc->setConfig(StBemcTriggerSimu::kOffline);
 
-   TStarJetPicoMaker *jetPicoMaker =
-      new TStarJetPicoMaker(Form("%s.root", outputName), mcChain, 1, outputName, nFiles, trigSet);
-   jetPicoMaker->ProcessMC(1);
+   TStarJetPicoMaker *jetPicoMaker = new TStarJetPicoMaker(Form("%s.root", outputName));
+   jetPicoMaker->SetInputSource(TStarJetPicoMaker::InputPicoDst);
+   // jetPicoMaker->ProcessMC(1);
    jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::VpdOrRank);
    jetPicoMaker->SetTowerAcceptMode(TStarJetPicoMaker::RejectBadTowerStatus);
    jetPicoMaker->SetStRefMultCorrMode(TStarJetPicoMaker::FillNone);
@@ -146,7 +86,8 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    jetPicoMaker->SetTrackDCAMax(3.0);
    jetPicoMaker->SetTrackFlagMin(0);
 
-   //  set DEBUG output level
+   jetPicoMaker->EventCuts()->AddTrigger(450202);
+   jetPicoMaker->EventCuts()->AddTrigger(450212);
 
    cout << "DEBUG C" << endl;
 
@@ -176,7 +117,7 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
 
    chain->ls(3);
    chain->Finish();
-   printf("my macro processed %i events in %s", i, nametag);
+   printf("my macro processed %i events", i);
    cout << "\tcpu: " << total.CpuTime() << "\treal: " << total.RealTime()
         << "\tratio: " << total.CpuTime() / total.RealTime() << endl;
 

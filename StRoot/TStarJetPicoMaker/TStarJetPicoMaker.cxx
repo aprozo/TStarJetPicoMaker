@@ -854,7 +854,8 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
       // HERE WE MANUALLY ADD THE HT2 TRIGGER IF AT LEAST ONE TOWER IS ABOVE THE BHT2 THRESHOLD. NOT IDEAL BUT OH WELL
       if (bht2 > 0 && adc > bht2 && count_tows == 0) {
          // LOG_INFO << "wisdom: ADDING TRIGGERS FOR EVENT " << endm;
-         mEvent->GetHeader()->AddTriggerId(370531); // zerobias trigger run id < 13077*
+         mEvent->GetHeader()->AddTriggerId(450202); 
+         mEvent->GetHeader()->AddTriggerId(450212);
          count_tows++;
       } // passed the threshold; added the trigger by hand
 
@@ -927,7 +928,7 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
 
       if (jp2 > 0 && jpAdc > jp2 && count_patches == 0) {
          // add triggers
-         mEvent->GetHeader()->AddTriggerId(370621);
+         // mEvent->GetHeader()->AddTriggerId(370621);
          count_patches++;
       }
 
