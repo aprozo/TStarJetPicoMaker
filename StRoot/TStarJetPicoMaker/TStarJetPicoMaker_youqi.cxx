@@ -285,6 +285,7 @@ void TStarJetPicoMaker::InitOutput()
    mTree = new TTree("JetTree", " Pico Tree for Jet");
    mTree->Branch("PicoJetTree", "TStarJetPicoEvent", &mEvent);
    mTree->SetAutoSave(100000);
+
    if (mMakeMC) {
       mMCTree = new TTree("JetTreeMc", " Pico Tree for MC Jet");
       mMCTree->Branch("PicoJetTree", "TStarJetPicoEvent", &mMCEvent);
@@ -363,7 +364,6 @@ Int_t TStarJetPicoMaker::MakeMuDst()
    if (mMakeV0)
       MuProcessV0s();
 
-   TProcessID::SetObjectCount(0);
    /* event is complete - fill the trees */
    mTree->Fill();
 
@@ -377,10 +377,8 @@ Int_t TStarJetPicoMaker::MakeMuDst()
    MuProcessMCEvent();
 
    /* event is complete - fill the trees */
-   if (mMakeMC) {
-      TProcessID::SetObjectCount(0);
+   if (mMakeMC)
       mMCTree->Fill();
-   }
 
    delete mMCEvent;
    mMCEvent = nullptr;
@@ -820,14 +818,6 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
    for (int i = 0; i < 3; ++i)
       mEvent->GetHeader()->SetJetPatchThreshold(i, mTriggerSimu->bemc->barrelJetPatchTh(i));
 
-   mEvent->GetHeader()->SetJetPatchThreshold(0, 20);  // jp0
-   mEvent->GetHeader()->SetJetPatchThreshold(1, 28);  // jp1
-   mEvent->GetHeader()->SetJetPatchThreshold(2, 36);  // jp2
-   mEvent->GetHeader()->SetHighTowerThreshold(0, 11); // bht0
-   mEvent->GetHeader()->SetHighTowerThreshold(1, 15); // bht1
-   mEvent->GetHeader()->SetHighTowerThreshold(2, 18); // bht2
-   mEvent->GetHeader()->SetHighTowerThreshold(3, 8);  // bht3
-
    /* get trigger thresholds for HT */
    Int_t bht0 = mTriggerSimu->bemc->barrelHighTowerTh(0);
    Int_t bht1 = mTriggerSimu->bemc->barrelHighTowerTh(1);
@@ -853,115 +843,142 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
       // LOG_INFO << "wisdom: ADC: " << (unsigned) adc << endm;
       // HERE WE MANUALLY ADD THE HT2 TRIGGER IF AT LEAST ONE TOWER IS ABOVE THE BHT2 THRESHOLD. NOT IDEAL BUT OH WELL
       if (bht2 > 0 && adc > bht2 && count_tows == 0) {
-         // LOG_INFO << "wisdom: ADDING TRIGGERS FOR EVENT " << endm;
-         mEvent->GetHeader()->AddTriggerId(370531); // zerobias trigger run id < 13077*
+         // LOG_INFO << "wisdom: ADDING TRIGGERS FOR EVENT " << (unsigned)
+         // /*mEvent->GetHeader()->GetEventId()*/mMuInputEvent->eventId() << " of run " << (unsigned)
+         // /*mEvent->GetHeader()->GetRunId()*/mMuInputEvent->runId() << " thanks to a tower with ADC " << (unsigned)
+         // adc << endm;
+         mEvent->GetHeader()->AddTriggerId(500205);
+         mEvent->GetHeader()->AddTriggerId(500215);
          count_tows++;
       } // passed the threshold; added the trigger by hand
-
-      std::bitset<32> trigMap = 0;
-
+      Int_t trigMap = 0;
       Float_t eta, phi;
       mBEMCGeom->getEtaPhi(towerId, eta, phi);
 
       if (bht1 > 0 && adc > bht1)
-         trigMap.set(1);
+         trigMap |= 1 << 1;
       if (bht2 > 0 && adc > bht2)
-         trigMap.set(2);
+         trigMap |= 1 << 2;
       if (bht3 > 0 && adc > bht3)
-         trigMap.set(3);
+         trigMap |= 1 << 3;
 
-      if (trigMap.any()) {
-         // LOG_INFO << "wisdom: high tower trigger found. ADC: " << adc << " towerId: " << towerId << endm;
+      if (trigMap & 0xf) {
+         // LOG_INFO << "wisdom: high tower trigger found. ADC: " << adc << endm;
+         /*LOG_DEBUG*/
          trigobj.Clear();
          trigobj.SetEta(eta);
          trigobj.SetPhi(phi);
          trigobj.SetId(towerId);
          trigobj.SetADC(adc);
          trigobj.SetBitMap(trigMap);
+
          mEvent->AddTrigObj(&trigobj);
       }
    }
 
-   // Sanity check
-   // The jet patches are numbered starting with JP0 centered at 150 degrees
-   // looking from the West into the IR (intersection region) and increasing
-   // clockwise, i.e. JP1 at 90 degrees, JP2 at 30 degrees, etc. On the East
-   // side the numbering picks up at JP6 centered again at 150 degrees and
-   // increasing clockwise (again as seen from the *West* into the IR). Thus
-   // JP0 and JP6 are in the same phi location in the STAR coordinate system.
-   // So are JP1 and JP7, etc.
-   // JP locations:
-   // Jet Patch# Eta   Phi,degrees(rad)   Quadrant
-   // 0          0.5   150 (2.618)           10'
-   // 1          0.5   90 (1.5708)           12'
-   // 2          0.5   30 (0.5236)            2'
-   // 3          0.5  -30 (-0.5236)           4'
-   // 4          0.5  -90 (-1.5708)           6'
-   // 5          0.5  -150 (2.618)            8'
-   // 6         -0.5   150 (2.618)           10'
-   // 7         -0.5   90 (1.5708)           12'
-   // 8         -0.5   30 (0.5236)            2'
-   // 9         -0.5  -30 (-0.5236)           4'
-   // 10        -0.5  -90 (-1.5708)           6'
-   // 11        -0.5  -150 (2.618)            8'
-   // 12        -0.1   150 (2.618)           10'
-   // 13        -0.1   90 (1.5708)           12'
-   // 14        -0.1   30 (0.5236)            2'
-   // 15        -0.1  -30 (-0.5236)           4'
-   // 16        -0.1  -90 (-1.5708)           6'
-   // 17        -0.1  -150 (2.618)            8'
+   // LOG_INFO << "wisdom: AFTER TOWER LOOP: " << endm;
+   // LOG_INFO << "n tows / adc [0 - 19+]" << endm;
+   // for(int i = 0; i < adc20.size(); ++i) {
+   // LOG_INFO << (unsigned) adc20[i] << " ";
+   //}
+   // LOG_INFO << endm;
 
-   // http://drupal.star.bnl.gov/STAR/system/files/BEMC_y2004.pdf
+   // JP locations:
+   // Jet Patch# Eta Phi Quadrant
+   // 0 0.5 150 10'
+   // 1 0.5 90 12'
+   // 2 0.5 30 2'
+   // 3 0.5 -30 4'
+   // 4 0.5 -90 6'
+   // 5 0.5 -150 8'
+   // 6 -0.5 150 10'
+   // 7 -0.5 90 12'
+   // 8 -0.5 30 2'
+   // 9 -0.5 -30 4'
+   // 10 -0.5 -90 6'
+   // 11 -0.5 -150 8'
+   // 12 -0.1 150 10'
+   // 13 -0.1 90 12'
+   // 14 -0.1 30 2'
+   // 15 -0.1 -30 4'
+   // 16 -0.1 -90 6'
+   // 17 -0.1 -150 8'
 
    /* get trigger thresholds for JP */
    Int_t jp0 = mTriggerSimu->bemc->barrelJetPatchTh(0);
    Int_t jp1 = mTriggerSimu->bemc->barrelJetPatchTh(1);
-   Int_t jp2 = mTriggerSimu->bemc->barrelJetPatchTh(2);
+   //
+   Int_t jp2e = mTriggerSimu->bemc->barrelJetPatchTh(2);
+   // TEMP for 2012 repro: barrelJetPatchTh(3) and (4) are 0, so only use (2):
+   Int_t jp2m = jp2e;
+   Int_t jp2w = jp2e;
+   // Int_t jp2m = mTriggerSimu->bemc->barrelJetPatchTh(3);
+   // Int_t jp2w = mTriggerSimu->bemc->barrelJetPatchTh(4);
 
-   // LOG_INFO << "Jet Patch trigger thresholds: jp0 " << jp0 << " jp1: " << jp1 << " jp2: " << jp2 << endm;
+   // Int_t jp2  = mTriggerSimu->bemc->barrelJetPatchTh(2);
+   // Int_t jp2 = 9999; //TEMP!
+   LOG_INFO << "Jet Patch trigger thresholds: jp0 " << jp0 << " jp1: " << jp1 << " jp2e,m,w: " << jp2e << " " << jp2m
+            << " " << jp2w << endm;
 
    /* lookup 12 jet patches & 6 overlap thresholds - no EEMC data saved */
    bool count_patches = 0;
    for (unsigned jp = 0; jp < 18; ++jp) {
       const Int_t jpAdc = mTriggerSimu->bemc->barrelJetPatchAdc(jp);
-
-      if (jp2 > 0 && jpAdc > jp2 && count_patches == 0) {
-         // add triggers
-         mEvent->GetHeader()->AddTriggerId(370621);
-         count_patches++;
+      // hard-coding this for now, will improve later -- ONLY WORKS FOR pA2015 RIGHT NOW!!
+      if (jp >= 0 && jp <= 5) {
+         if (jp2w > 0 && jpAdc > jp2w && count_patches == 0) {
+            // add triggers
+            // TEMP for 2012: trigger ID is 370621, not 500401 or 500411.
+            mEvent->GetHeader()->AddTriggerId(370621);
+            // mEvent->GetHeader()->AddTriggerId(500401);
+            // mEvent->GetHeader()->AddTriggerId(500411);
+            count_patches++;
+         }
+      }
+      if (jp >= 6 && jp <= 11) {
+         if (jp2e > 0 && jpAdc > jp2e && count_patches == 0) {
+            // add triggers
+            // TEMP for 2012: trigger ID is 370621, not 500401 or 500411.
+            mEvent->GetHeader()->AddTriggerId(370621);
+            // mEvent->GetHeader()->AddTriggerId(500401);
+            // mEvent->GetHeader()->AddTriggerId(500411);
+            count_patches++;
+         }
+      }
+      if (jp >= 12 && jp <= 17) {
+         if (jp2m > 0 && jpAdc > jp2m && count_patches == 0) {
+            // add triggers
+            // TEMP for 2012: trigger ID is 370621, not 500401 or 500411.
+            mEvent->GetHeader()->AddTriggerId(370621);
+            // mEvent->GetHeader()->AddTriggerId(500401);
+            // mEvent->GetHeader()->AddTriggerId(500411);
+            count_patches++;
+         }
       }
 
-      std::bitset<32> trigMap; // default = 0
+      Int_t trigMap = 0;
+
       if (jp0 > 0 && jpAdc > jp0)
-         trigMap.set(4);
+         trigMap |= 1 << 4;
       if (jp1 > 0 && jpAdc > jp1)
-         trigMap.set(5);
-      if (jp2 > 0 && jpAdc > jp2)
-         trigMap.set(6);
-      if (!trigMap.any())
-         continue;
+         trigMap |= 1 << 5;
+      if (jp >= 0 && jp <= 5 && jp2w > 0 && jpAdc > jp2w) {
+         trigMap |= 1 << 6;
+      } else if (jp >= 6 && jp <= 11 && jp2e > 0 && jpAdc > jp2e) {
+         trigMap |= 1 << 6;
+      } else if (jp >= 12 && jp <= 17 && jp2m > 0 && jpAdc > jp2m) {
+         trigMap |= 1 << 6;
+      }
 
-      LOG_DEBUG << "jet patch trigger found. ADC: " << jpAdc << " jet patch: " << jp << endm;
+      if (trigMap & 0x70) {
+         LOG_DEBUG << "jet patch trigger found. ADC: " << jpAdc << endm;
+         trigobj.Clear();
+         trigobj.SetId(jp);
+         trigobj.SetADC(jpAdc);
+         trigobj.SetBitMap(trigMap);
 
-      float eta;
-      if (jp < 6)
-         eta = 0.5f;
-      else if (jp < 12)
-         eta = -0.5f;
-      else
-         eta = -0.1f;
-
-      const int j = jp % 6; // be carefull because jp is unsigned, the sub-expression 150.0- (jp % 6) * 60 is also
-                            // unsigned and when jp=3, it becomes a large positive number
-      const float phi = TVector2::Phi_mpi_pi((150.0 - j * 60.0) * TMath::DegToRad());
-
-      trigobj.Clear();
-      trigobj.SetId(jp);
-      trigobj.SetADC(jpAdc);
-      trigobj.SetBitMap(trigMap);
-      trigobj.SetEta(eta);
-      trigobj.SetPhi(phi);
-      mEvent->AddTrigObj(&trigobj);
+         mEvent->AddTrigObj(&trigobj);
+      }
    }
 }
 
@@ -1042,8 +1059,6 @@ Bool_t TStarJetPicoMaker::MuFillHeader()
    mEvent->GetHeader()->SetZdcWestRate(mMuInputEvent->runInfo().zdcWestRate());
    mEvent->GetHeader()->SetZdcEastRate(mMuInputEvent->runInfo().zdcEastRate());
    mEvent->GetHeader()->SetZdcCoincidenceRate(mMuInputEvent->runInfo().zdcCoincidenceRate());
-   mEvent->GetHeader()->SetnumberOfVpdEastHits(mMuInputEvent->numberOfVpdEastHits());
-   mEvent->GetHeader()->SetnumberOfVpdEastHits(mMuInputEvent->numberOfVpdEastHits());
    mEvent->GetHeader()->SetBbcWestRate(mMuInputEvent->runInfo().bbcWestRate());
    mEvent->GetHeader()->SetBbcEastRate(mMuInputEvent->runInfo().bbcEastRate());
    mEvent->GetHeader()->SetBbcCoincidenceRate(mMuInputEvent->runInfo().bbcCoincidenceRate());

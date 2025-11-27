@@ -30,4 +30,4 @@ done
 ls -ltr "$LIBDIR"/*.so || true
 
 cd "$WORKDIR"
-root4star -q -b ./macros/makeTStarJetPico.cxx
+root4star -q -b -l ./macros/makeTStarJetPico.cxx

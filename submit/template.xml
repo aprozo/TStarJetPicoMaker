@@ -5,7 +5,7 @@
   <stdout URL="file:&jobFolder;/log/$JOBID.out"/>
   <stderr URL="file:&jobFolder;/err/$JOBID.err"/>
 
-  <input URL="filelist:&baseFolder;/lists/list_of_lists.list" nFiles="all"/>
+  <input URL="filelist:&baseFolder;/lists/&listBasename;.list" nFiles="all"/>
 
   <Generator>
     <Location>./report/</Location>

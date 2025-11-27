@@ -1,6 +1,7 @@
 #!/bin/bash
-filelist="lists/all_pt_hat.list"   
-#filelist="lists/test.list"
+filelist="lists/list_of_lists.list"   
+# filelist="lists/diff.list" 
+# filelist="lists/test.list"
      
 if [ ! -f "$filelist" ]; then
         echo "Error processing $filelist"

@@ -3,8 +3,8 @@
 baseFolder="$PWD"
 # -- listOfFiles
 listOfFiles="$PWD/$1"
-# strip BASENAME from the path without the extension to get filelist_name range
-filelist_name=$(basename "${listOfFiles}" .list)
+# strip BASENAME from the path without the extension to get listBasename range
+listBasename=$(basename "${listOfFiles}" .list)
 # -- root macro
 rootMacro="makeTStarJetPico.cxx"
 # -- production Id
@@ -16,7 +16,7 @@ starVersion="pro"
 # -- submission xml file
 templateXml="template.xml"
 
-jobFolder="${baseFolder}/submit/${productionId}/job_${filelist_name}"
+jobFolder="${baseFolder}/submit/${productionId}/job_${listBasename}"
 # -- job submission directory
 mkdir -p "${jobFolder}"
 cd "${jobFolder}"
@@ -47,7 +47,7 @@ done
 echo "ok"
 
 # -- submit
-generatedXml="generated_${filelist_name}.xml"
+generatedXml="generated_${listBasename}.xml"
 
 cat <<EOF >"${generatedXml}"
 <?xml version="1.0" encoding="utf-8" ?>
@@ -57,7 +57,7 @@ cat <<EOF >"${generatedXml}"
 <!ENTITY jobFolder "${jobFolder}">
 <!ENTITY listOfFiles "${listOfFiles}">
 <!ENTITY starVersion "${starVersion}">
-<!ENTITY filelist_name "${filelist_name}">
+<!ENTITY listBasename "${listBasename}">
 ]>
 
 EOF
