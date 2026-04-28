@@ -37,6 +37,9 @@ bin
 bin/*
 src/obj
 src/obj/*
+*.d
+*.list
+*Dict.cxx
 
 # dylibraries
 *.so

@@ -73,21 +73,36 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    trigsim->bemc->setConfig(StBemcTriggerSimu::kOffline);
 
    TStarJetPicoMaker *jetPicoMaker = new TStarJetPicoMaker(Form("%s.root", outputName));
-   jetPicoMaker->SetInputSource(TStarJetPicoMaker::InputPicoDst);
-   // jetPicoMaker->ProcessMC(1);
+   jetPicoMaker->SetInputSource(TStarJetPicoMaker::InputMuDst);
+   jetPicoMaker->ProcessMC(0);                 // 0 = data, 1 = MC; LoadMuDst aborts if MC requested without StMiniMcEvent
    jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::VpdOrRank);
-   jetPicoMaker->SetTowerAcceptMode(TStarJetPicoMaker::RejectBadTowerStatus);
+   jetPicoMaker->SetTowerAcceptMode(TStarJetPicoMaker::RejectBadTowerStatus); // matches Dmitry's StjTowerEnergyCutBemcStatus(1)
    jetPicoMaker->SetStRefMultCorrMode(TStarJetPicoMaker::FillNone);
-   jetPicoMaker->EventCuts()->SetVzRange(-30, 30);
+   // Vz: kept at ±80 here; the production analysis (ppAnalysis::VzCut) tightens to ±60 to match Dmitry.
+   jetPicoMaker->EventCuts()->SetVzRange(-80, 80);
    jetPicoMaker->EventCuts()->SetRefMultRange(0, 7000);
-   jetPicoMaker->SetTowerEnergyMin(0.15);
-   jetPicoMaker->SetTrackEtaRange(-1.5, 1.5);
-   jetPicoMaker->SetTrackFitPointMin(10);
+   // Tower ET threshold: Dmitry uses 0.20 GeV (StjTowerEnergyCutEt(0.2)); raised from 0.15 to match.
+   // Note: existing picos produced with 0.15 will need re-production to gain the tighter cut.
+   jetPicoMaker->SetTowerEnergyMin(0.20);
+   // Tracks: |η|<2.5, FitPointMin=12 (Dmitry's NHits>=12), DCA<=3 cm. Stage B (RunppAna) re-applies the same.
+   jetPicoMaker->SetTrackEtaRange(-2.5, 2.5);
+   jetPicoMaker->SetTrackFitPointMin(12);
    jetPicoMaker->SetTrackDCAMax(3.0);
    jetPicoMaker->SetTrackFlagMin(0);
 
-   jetPicoMaker->EventCuts()->AddTrigger(450202);
-   jetPicoMaker->EventCuts()->AddTrigger(450212);
+   // jetPicoMaker->EventCuts()->AddTrigger(370531); // HT2
+   // jetPicoMaker->EventCuts()->AddTrigger(370621); // JP2
+   // jetPicoMaker->EventCuts()->AddTrigger(370011); // MB
+
+   jetPicoMaker->EventCuts()->AddTrigger(370601); // JP0
+   jetPicoMaker->EventCuts()->AddTrigger(370611); // JP1
+   jetPicoMaker->EventCuts()->AddTrigger(370621); // JP2
+   jetPicoMaker->EventCuts()->AddTrigger(370982); // JP2*L2JetHigh
+   jetPicoMaker->EventCuts()->AddTrigger(370641); // AJP
+   jetPicoMaker->EventCuts()->AddTrigger(370001); // VPDMB
+   jetPicoMaker->EventCuts()->AddTrigger(370011); // VPDMB-nobsmd
+   jetPicoMaker->EventCuts()->AddTrigger(370021); // BBCMB
+   jetPicoMaker->EventCuts()->AddTrigger(370022); // BBCMB
 
    cout << "DEBUG C" << endl;
 

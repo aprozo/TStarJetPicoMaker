@@ -89,7 +89,7 @@ ClassImp(TStarJetPicoMaker)
      mTowerEnergyMin(0.15)
 {
 
-   if (!LoadTree(mcTree)) {
+   if (mcTree != nullptr && !LoadTree(mcTree)) {
       LOG_ERROR << "load chain failed" << endm;
    }
 
@@ -167,15 +167,15 @@ Int_t TStarJetPicoMaker::Make()
 {
    mCallsToMake++;
 
-   if (mStMiniMcEvent == nullptr) {
-      LOG_ERROR << "StMiniMcEvent Branch not loaded properly: exiting run loop" << endm;
-      return kStFatal;
-   }
-   // load the matching miniMC event
-   if (LoadEvent() == false) {
-      LOG_ERROR << "Could not find miniMC event matching muDST event" << endm;
-      return kStErr;
-   }
+   // if (mStMiniMcEvent == nullptr) {
+   //    LOG_ERROR << "StMiniMcEvent Branch not loaded properly: exiting run loop" << endm;
+   //    return kStFatal;
+   // }
+   // // load the matching miniMC event
+   // if (LoadEvent() == false) {
+   //    LOG_ERROR << "Could not find miniMC event matching muDST event" << endm;
+   //    return kStErr;
+   // }
 
    if (mInputMode == InputMuDst)
       return MakeMuDst();
@@ -370,21 +370,20 @@ Int_t TStarJetPicoMaker::MakeMuDst()
    delete mEvent;
    mEvent = nullptr;
 
-   if (mMakeMC)
+   if (mMakeMC) {
       mMCEvent = new TStarJetPicoEvent();
 
-   /*process MC event*/
-   MuProcessMCEvent();
+      /*process MC event*/
+      MuProcessMCEvent();
 
-   /* event is complete - fill the trees */
-   if (mMakeMC) {
+      /* event is complete - fill the trees */
+
       TProcessID::SetObjectCount(0);
       mMCTree->Fill();
+
+      delete mMCEvent;
+      mMCEvent = nullptr;
    }
-
-   delete mMCEvent;
-   mMCEvent = nullptr;
-
    /* count the successful write & exit */
    mNAcceptedEvents++;
 
@@ -820,14 +819,6 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
    for (int i = 0; i < 3; ++i)
       mEvent->GetHeader()->SetJetPatchThreshold(i, mTriggerSimu->bemc->barrelJetPatchTh(i));
 
-   mEvent->GetHeader()->SetJetPatchThreshold(0, 20);  // jp0
-   mEvent->GetHeader()->SetJetPatchThreshold(1, 28);  // jp1
-   mEvent->GetHeader()->SetJetPatchThreshold(2, 36);  // jp2
-   mEvent->GetHeader()->SetHighTowerThreshold(0, 11); // bht0
-   mEvent->GetHeader()->SetHighTowerThreshold(1, 15); // bht1
-   mEvent->GetHeader()->SetHighTowerThreshold(2, 18); // bht2
-   mEvent->GetHeader()->SetHighTowerThreshold(3, 8);  // bht3
-
    /* get trigger thresholds for HT */
    Int_t bht0 = mTriggerSimu->bemc->barrelHighTowerTh(0);
    Int_t bht1 = mTriggerSimu->bemc->barrelHighTowerTh(1);
@@ -852,10 +843,10 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
       }
       // LOG_INFO << "wisdom: ADC: " << (unsigned) adc << endm;
       // HERE WE MANUALLY ADD THE HT2 TRIGGER IF AT LEAST ONE TOWER IS ABOVE THE BHT2 THRESHOLD. NOT IDEAL BUT OH WELL
-      if (bht2 > 0 && adc > bht2 && count_tows == 0) {
+      // only for embedding
+      if (mMakeMC && bht2 > 0 && adc > bht2 && count_tows == 0) {
          // LOG_INFO << "wisdom: ADDING TRIGGERS FOR EVENT " << endm;
-         mEvent->GetHeader()->AddTriggerId(450202); 
-         mEvent->GetHeader()->AddTriggerId(450212);
+         mEvent->GetHeader()->AddTriggerId(370531);
          count_tows++;
       } // passed the threshold; added the trigger by hand
 
@@ -928,7 +919,7 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
 
       if (jp2 > 0 && jpAdc > jp2 && count_patches == 0) {
          // add triggers
-         // mEvent->GetHeader()->AddTriggerId(370621);
+         mEvent->GetHeader()->AddTriggerId(370621);
          count_patches++;
       }
 
@@ -1044,7 +1035,7 @@ Bool_t TStarJetPicoMaker::MuFillHeader()
    mEvent->GetHeader()->SetZdcEastRate(mMuInputEvent->runInfo().zdcEastRate());
    mEvent->GetHeader()->SetZdcCoincidenceRate(mMuInputEvent->runInfo().zdcCoincidenceRate());
    mEvent->GetHeader()->SetnumberOfVpdEastHits(mMuInputEvent->numberOfVpdEastHits());
-   mEvent->GetHeader()->SetnumberOfVpdEastHits(mMuInputEvent->numberOfVpdEastHits());
+   mEvent->GetHeader()->SetnumberOfVpdWestHits(mMuInputEvent->numberOfVpdWestHits());
    mEvent->GetHeader()->SetBbcWestRate(mMuInputEvent->runInfo().bbcWestRate());
    mEvent->GetHeader()->SetBbcEastRate(mMuInputEvent->runInfo().bbcEastRate());
    mEvent->GetHeader()->SetBbcCoincidenceRate(mMuInputEvent->runInfo().bbcCoincidenceRate());
