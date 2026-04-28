@@ -169,7 +169,26 @@ public:
   
   /* set the minimum tower energy to be reconstructed (default = 0.15) */
   void SetTowerEnergyMin(double mMin) {mTowerEnergyMin = mMin;}
-  
+
+  /* set the BEMC tower ADC quality cut. Mirrors Dmitry's StjTowerEnergyCutAdc(min,sigma):
+   *   require (ADC - pedestal) > min  AND  (ADC - pedestal) > sigma * RMS
+   * Default = (4, 3.0). Set min<=0 (or sigma<=0) to disable.
+   */
+  void SetTowerAdcCut(int min, double sigma) {mTowerAdcMin = min; mTowerAdcSigma = sigma;}
+
+  /* Raise a named log4cxx logger's threshold so messages below `level`
+     are dropped at the source (no awk filtering needed). `level` is one
+     of "DEBUG","INFO","WARN","ERROR","FATAL" — case-sensitive.
+     Example:  TStarJetPicoMaker::SetLoggerLevel("StTriggerSimuMaker","WARN");
+   */
+  static void SetLoggerLevel(const char* loggerName, const char* level);
+
+  /* Install a chained ROOT error handler that swallows the TRefTable::Add
+     "SetParent must be called" spam emitted on every Fill while forwarding
+     all other errors to STAR's handler.
+   */
+  static void SuppressTRefTableNoise();
+
   private:
   
   Int_t  InitInput();
@@ -274,7 +293,9 @@ public:
   Double_t mTrackEtaMax;
   Int_t    mTrackFitPointMin;
   Double_t mTowerEnergyMin;
-  
+  Int_t    mTowerAdcMin;     ///< Dmitry's StjTowerEnergyCutAdc(min, sigma): require (ADC-ped) > min
+  Double_t mTowerAdcSigma;   ///< Dmitry's StjTowerEnergyCutAdc(min, sigma): require (ADC-ped) > sigma * RMS
+
   ClassDef(TStarJetPicoMaker,1)
 };
 

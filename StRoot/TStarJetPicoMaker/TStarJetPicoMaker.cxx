@@ -42,7 +42,47 @@
 #include "StEmcClusterCollection.h"
 #include "StDaqLib/EMC/StEmcDecoder.h"
 
+#include "TError.h"
+#include <log4cxx/logger.h>
+#include <log4cxx/level.h>
+
 #include <math.h>
+#include <cstring>
+
+namespace {
+   // Chained ROOT error handler that drops the TRefTable::Add
+   // "SetParent must be called before adding uid=..." spam emitted on every
+   // TTree::Fill, while forwarding everything else to STAR's installed handler.
+   ErrorHandlerFunc_t gPrevStarErrorHandler = nullptr;
+   void TStarJetFilteringErrorHandler(int level, Bool_t abort, const char *location, const char *msg)
+   {
+      // ROOT calls Error("TRefTable::Add", "SetParent must be called..."):
+      // location holds the call-site, msg holds the formatted text.
+      if (location && std::strstr(location, "TRefTable::Add") &&
+          msg      && std::strstr(msg,      "SetParent must be called")) return;
+      if (gPrevStarErrorHandler) gPrevStarErrorHandler(level, abort, location, msg);
+   }
+}
+
+void TStarJetPicoMaker::SetLoggerLevel(const char* loggerName, const char* level)
+{
+   if (!loggerName || !level) return;
+   log4cxx::LevelPtr lvl;
+   if      (!std::strcmp(level, "DEBUG")) lvl = log4cxx::Level::getDebug();
+   else if (!std::strcmp(level, "INFO" )) lvl = log4cxx::Level::getInfo();
+   else if (!std::strcmp(level, "WARN" )) lvl = log4cxx::Level::getWarn();
+   else if (!std::strcmp(level, "ERROR")) lvl = log4cxx::Level::getError();
+   else if (!std::strcmp(level, "FATAL")) lvl = log4cxx::Level::getFatal();
+   else return;
+   log4cxx::Logger::getLogger(loggerName)->setLevel(lvl);
+}
+
+void TStarJetPicoMaker::SuppressTRefTableNoise()
+{
+   if (gPrevStarErrorHandler) return;       // already installed
+   gPrevStarErrorHandler = ::GetErrorHandler();
+   ::SetErrorHandler(TStarJetFilteringErrorHandler);
+}
 
 ClassImp(TStarJetPicoMaker)
 
@@ -86,7 +126,11 @@ ClassImp(TStarJetPicoMaker)
      mTrackEtaMin(-1.5),
      mTrackEtaMax(1.5),
      mTrackFitPointMin(10),
-     mTowerEnergyMin(0.15)
+     mTowerEnergyMin(0.15),
+     // Defaults match Dmitry's `addBemcCut(new StjTowerEnergyCutAdc(4, 3))` in
+     // run12_200GeVJetCode/RunJetFinder2012UePro.C:135.
+     mTowerAdcMin(4),
+     mTowerAdcSigma(3.0)
 {
 
    if (mcTree != nullptr && !LoadTree(mcTree)) {
@@ -704,6 +748,18 @@ Bool_t TStarJetPicoMaker::MuProcessBEMC()
 
          if (towerEnergy < mTowerEnergyMin)
             continue;
+
+         /* Per-tower ADC quality cut (Dmitry's StjTowerEnergyCutAdc(min,sigma)).
+            Require (ADC - pedestal) > mTowerAdcMin AND > mTowerAdcSigma * RMS.
+            Both conditions disabled when min<=0 or sigma<=0. */
+         if (mTowerAdcMin > 0 || mTowerAdcSigma > 0.0) {
+            float pedestal = 0.0f, rms = 0.0f;
+            const int CAP = 0;
+            mBemcTables->getPedestal(BTOW, towerID, CAP, pedestal, rms);
+            const Float_t adcMinusPed = towerADC - pedestal;
+            if (mTowerAdcMin   > 0   && adcMinusPed <= mTowerAdcMin)         continue;
+            if (mTowerAdcSigma > 0.0 && adcMinusPed <= mTowerAdcSigma * rms) continue;
+         }
 
          Float_t towerEta, towerPhi;
          mBEMCGeom->getEtaPhi(towerID, towerEta, towerPhi);

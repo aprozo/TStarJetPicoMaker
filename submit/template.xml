@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 
-<job name="pp2012_embed" fileListSyntax="paths" maxFilesPerProcess="1" simulateSubmission="false">
+<!-- <job name="pp2012_embed" fileListSyntax="paths" maxFilesPerProcess="1" simulateSubmission="false"> -->
+<job name="pp2012" fileListSyntax="xrootd" maxFilesPerProcess="20" simulateSubmission="false"> 
 <shell>singularity exec -e -B /direct -B /star -B /afs -B /gpfs -B /sdcc/lustre02 /cvmfs/star.sdcc.bnl.gov/containers/rhic_sl7.sif</shell>
 
   <stdout URL="file:&jobFolder;/log/$JOBID.out"/>
   <stderr URL="file:&jobFolder;/err/$JOBID.err"/>
 
-  <input URL="filelist:&baseFolder;/lists/&listBasename;.list" nFiles="all"/>
+  <!-- <input URL="filelist:&baseFolder;/lists/&listBasename;.list" nFiles="all"/> -->
+  <input URL="catalog:star.bnl.gov?storage!=hpss,filetype=daq_reco_MuDst,filename~st_physics,production=P12id,trgsetupname=pp200_production_2012" nFiles="all"/>
 
   <Generator>
     <Location>./report/</Location>
@@ -17,7 +19,16 @@
   <command>
     starver &starVersion;
     ls -ltrh **
-    root4star -l -b -q &rootMacro;\(\"/gpfs01/star/pwg/prozorov/TStarJetPicoMaker/lists/$FILEBASENAME.list\",\"$FILEBASENAME\"\) &gt;&amp; ${JOBID}.log
+    # `$FILELIST` is the per-job list the scheduler dispatches (with maxFilesPerProcess=20
+    # it contains up to 20 input MuDst paths). The scheduler post-stages files locally and
+    # updates $FILELIST to the local-scratch list before this command runs.
+    # `makeTStarJetPico` passes it to `StMuDstMaker` which accepts either a `.list` or a single
+    # `.root`, so this template works for both single-file (max=1) and multi-file (max>1) modes.
+    #
+    # Output name: we use `$JOBINDEX` (chunk index 0..N-1) — unique per chunk. Using
+    # `$FILEBASENAME` here would collide because STAR scheduler sets it to "no_name" when
+    # multiple input files are dispatched per process.
+    root4star -l -b -q &rootMacro;\(\"$FILELIST\",\"$JOBINDEX\"\) &gt;&amp; ${JOBID}.log
   </command>
 
   <output fromScratch="*.root" toURL="&jobFolder;/production/" />

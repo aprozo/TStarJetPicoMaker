@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 
-root4star -q -b -l ./macros/makeTStarJetPico.cxx 2>&1 \
-  | awk '!(/TStarJetPicoMaker:ERROR - TRefTable::Add : SetParent must be called before adding uid=[0-9]+/ || /StTriggerSimuMaker:INFO[[:space:]]+- /)'
+# check if not in singularity already
+if [ -z "$SINGULARITY_NAME" ]; then
+    SIF=/cvmfs/star.sdcc.bnl.gov/containers/rhic_sl7.sif
+    BINDS="-B /direct -B /star -B /afs -B /gpfs -B /sdcc/lustre02"
 
-# exit ${PIPESTATUS[0]}
+    # Run inside the SL7 container; csh sources ~/.cshrc which sets up root4star.
+    singularity exec -e $BINDS $SIF csh -c "cd $PWD && root4star -q -b -l ./macros/makeTStarJetPico.cxx"
+
+else
+   root4star -q -b -l ./macros/makeTStarJetPico.cxx
+fi
+
+
