@@ -167,6 +167,13 @@ public:
    */
   void SetTrackFitPointMin(int mMin) {mTrackFitPointMin = mMin;}
   
+  /* set minimum radial coordinate of last fit hit (cm). Mirrors Dmitry's
+     StjTrackCutLastPoint(125) — drops short helix-curling tracks.
+     Default = 0 (disabled, original behaviour preserved). Set to 125 to
+     enforce Dmitry's cut at production time without altering pico schema.
+   */
+  void SetTrackLastPointMin(double mMin) {mTrackLastPointMin = mMin;}
+
   /* set the minimum tower energy to be reconstructed (default = 0.15) */
   void SetTowerEnergyMin(double mMin) {mTowerEnergyMin = mMin;}
 
@@ -292,6 +299,7 @@ public:
   Double_t mTrackEtaMin;
   Double_t mTrackEtaMax;
   Int_t    mTrackFitPointMin;
+  Double_t mTrackLastPointMin; ///< Dmitry's StjTrackCutLastPoint(125): require lastPoint.Perp() > min. Default 0 = off.
   Double_t mTowerEnergyMin;
   Int_t    mTowerAdcMin;     ///< Dmitry's StjTowerEnergyCutAdc(min, sigma): require (ADC-ped) > min
   Double_t mTowerAdcSigma;   ///< Dmitry's StjTowerEnergyCutAdc(min, sigma): require (ADC-ped) > sigma * RMS

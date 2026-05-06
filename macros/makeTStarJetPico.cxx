@@ -104,6 +104,9 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    jetPicoMaker->SetTrackFitPointMin(12);
    jetPicoMaker->SetTrackDCAMax(3.0);
    jetPicoMaker->SetTrackFlagMin(0);
+   // Dmitry's StjTrackCutLastPoint(125): reject tracks with last-fit-point r<=125.
+   // Applied at production; no schema change to TStarJetPicoPrimaryTrack required.
+   jetPicoMaker->SetTrackLastPointMin(125.0);
 
    // jetPicoMaker->EventCuts()->AddTrigger(370531); // HT2
    // jetPicoMaker->EventCuts()->AddTrigger(370621); // JP2

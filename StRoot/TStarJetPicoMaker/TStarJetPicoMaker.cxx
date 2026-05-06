@@ -135,6 +135,7 @@ ClassImp(TStarJetPicoMaker)
      mTrackEtaMin(-1.5),
      mTrackEtaMax(1.5),
      mTrackFitPointMin(10),
+     mTrackLastPointMin(0.0), // 0 = disabled; set to 125 via macro to mirror Dmitry's StjTrackCutLastPoint
      mTowerEnergyMin(0.15),
      // Defaults match Dmitry's `addBemcCut(new StjTowerEnergyCutAdc(4, 3))` in
      // run12_200GeVJetCode/RunJetFinder2012UePro.C:135.
@@ -610,6 +611,16 @@ Bool_t TStarJetPicoMaker::MuProcessPrimaryTracks()
       if (muTrack->flag() < mTrackFlagMin || muTrack->nHits() <= mTrackFitPointMin ||
           muTrack->dcaGlobal().mag() > mTrackDCAMax || muTrack->eta() > mTrackEtaMax || muTrack->eta() < mTrackEtaMin)
          continue;
+
+      /* Dmitry's StjTrackCutLastPoint(125): reject tracks whose last fit hit
+         is inside r=125 cm. Applied at production so the field need not be
+         stored in the pico schema. Disabled when mTrackLastPointMin <= 0. */
+      if (mTrackLastPointMin > 0.0) {
+         const StThreeVectorF &lp = muTrack->lastPoint();
+         const double rLast = std::sqrt(lp.x()*lp.x() + lp.y()*lp.y());
+         if (rLast <= mTrackLastPointMin)
+            continue;
+      }
       jetTrack.Clear();
 
       /* fill track information */
@@ -803,10 +814,8 @@ Bool_t TStarJetPicoMaker::MuProcessBEMC()
                continue;
          }
 
-         Float_t towerEta, towerPhi;
-         mBEMCGeom->getEtaPhi(towerID, towerEta, towerPhi);
-
-         /* check for SMD hits in the tower */
+         /* check for SMD hits in the tower (towerEta/towerPhi resolved earlier
+            for the Et cut) */
          Int_t ehits = MuFindSMDClusterHits(mEmcCollection, towerEta, towerPhi, 2);
          Int_t phits = MuFindSMDClusterHits(mEmcCollection, towerEta, towerPhi, 3);
 
