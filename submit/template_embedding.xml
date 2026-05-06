@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<job name="pp2012_embed" fileListSyntax="paths" maxFilesPerProcess="1" simulateSubmission="false">
+<shell>singularity exec -e -B /direct -B /star -B /afs -B /gpfs -B /sdcc/lustre02 /cvmfs/star.sdcc.bnl.gov/containers/rhic_sl7.sif</shell>
+
+  <stdout URL="file:&jobFolder;/log/$JOBID.out"/>
+  <stderr URL="file:&jobFolder;/err/$JOBID.err"/>
+
+  <!-- list_of_lists.list (or a similar file containing per-pthat-bin list paths). -->
+  <!-- Each line is a path to a sublist of MuDsts; one job per line.            -->
+  <input URL="filelist:&listOfFiles;" nFiles="all"/>
+
+  <Generator>
+    <Location>./report/</Location>
+    <ScriptLocation>./csh/</ScriptLocation>
+    <ListLocation>./list/</ListLocation>
+  </Generator>
+
+  <command>
+    starver &starVersion;
+    ls -ltrh **
+    # $INPUTFILE0 is one entry from list_of_lists.list — i.e. a path to a per-bin
+    # .list file (e.g. lists/pt_hat1115_000.list). The macro reads that and
+    # derives the corresponding minimc.root paths.
+    set sublist = "$INPUTFILE0"
+    set basename = `basename $sublist .list`
+    root4star -l -b -q &rootMacro;\(\"$sublist\",\"$basename\"\) &gt;&amp; ${JOBID}.log
+  </command>
+
+  <output fromScratch="*.root" toURL="&jobFolder;/production/" />
+  <output fromScratch="*.log" toURL="&jobFolder;/log/" />
+
+  <ResourceUsage>
+    <Times>
+      <MaxWallTime>3</MaxWallTime>
+    </Times>
+    <Memory>
+      <MinMemory>2000</MinMemory>
+    </Memory>
+  </ResourceUsage>
+
+  <SandBox installer="ZIP">
+    <Package name="LocalLibraries">
+      <File>file:&baseFolder;/libs/</File>
+      <File>file:&baseFolder;/macros/&rootMacro;</File>
+    </Package>
+  </SandBox>
+</job>

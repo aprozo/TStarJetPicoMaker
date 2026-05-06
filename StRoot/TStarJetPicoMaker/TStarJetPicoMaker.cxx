@@ -42,7 +42,56 @@
 #include "StEmcClusterCollection.h"
 #include "StDaqLib/EMC/StEmcDecoder.h"
 
+#include "TError.h"
+#include <log4cxx/logger.h>
+#include <log4cxx/level.h>
+
 #include <math.h>
+#include <cstring>
+
+namespace {
+// Chained ROOT error handler that drops the TRefTable::Add
+// "SetParent must be called before adding uid=..." spam emitted on every
+// TTree::Fill, while forwarding everything else to STAR's installed handler.
+ErrorHandlerFunc_t gPrevStarErrorHandler = nullptr;
+void TStarJetFilteringErrorHandler(int level, Bool_t abort, const char *location, const char *msg)
+{
+   // ROOT calls Error("TRefTable::Add", "SetParent must be called..."):
+   // location holds the call-site, msg holds the formatted text.
+   if (location && std::strstr(location, "TRefTable::Add") && msg && std::strstr(msg, "SetParent must be called"))
+      return;
+   if (gPrevStarErrorHandler)
+      gPrevStarErrorHandler(level, abort, location, msg);
+}
+} // namespace
+
+void TStarJetPicoMaker::SetLoggerLevel(const char *loggerName, const char *level)
+{
+   if (!loggerName || !level)
+      return;
+   log4cxx::LevelPtr lvl;
+   if (!std::strcmp(level, "DEBUG"))
+      lvl = log4cxx::Level::getDebug();
+   else if (!std::strcmp(level, "INFO"))
+      lvl = log4cxx::Level::getInfo();
+   else if (!std::strcmp(level, "WARN"))
+      lvl = log4cxx::Level::getWarn();
+   else if (!std::strcmp(level, "ERROR"))
+      lvl = log4cxx::Level::getError();
+   else if (!std::strcmp(level, "FATAL"))
+      lvl = log4cxx::Level::getFatal();
+   else
+      return;
+   log4cxx::Logger::getLogger(loggerName)->setLevel(lvl);
+}
+
+void TStarJetPicoMaker::SuppressTRefTableNoise()
+{
+   if (gPrevStarErrorHandler)
+      return; // already installed
+   gPrevStarErrorHandler = ::GetErrorHandler();
+   ::SetErrorHandler(TStarJetFilteringErrorHandler);
+}
 
 ClassImp(TStarJetPicoMaker)
 
@@ -86,10 +135,14 @@ ClassImp(TStarJetPicoMaker)
      mTrackEtaMin(-1.5),
      mTrackEtaMax(1.5),
      mTrackFitPointMin(10),
-     mTowerEnergyMin(0.15)
+     mTowerEnergyMin(0.15),
+     // Defaults match Dmitry's `addBemcCut(new StjTowerEnergyCutAdc(4, 3))` in
+     // run12_200GeVJetCode/RunJetFinder2012UePro.C:135.
+     mTowerAdcMin(4),
+     mTowerAdcSigma(3.0)
 {
 
-   if (!LoadTree(mcTree)) {
+   if (mcTree != nullptr && !LoadTree(mcTree)) {
       LOG_ERROR << "load chain failed" << endm;
    }
 
@@ -167,14 +220,19 @@ Int_t TStarJetPicoMaker::Make()
 {
    mCallsToMake++;
 
-   if (mStMiniMcEvent == nullptr) {
-      LOG_ERROR << "StMiniMcEvent Branch not loaded properly: exiting run loop" << endm;
-      return kStFatal;
-   }
-   // load the matching miniMC event
-   if (LoadEvent() == false) {
-      LOG_ERROR << "Could not find miniMC event matching muDST event" << endm;
-      return kStErr;
+   // Advance the miniMC chain to the entry matching this MuDst event.
+   // Skipped in data-only mode (mMakeMC=false) where no miniMC chain is loaded.
+   // Without this call, LoadTree() leaves mStMiniMcEvent pinned at chain entry 0
+   // and JetTreeMc gets the same MC event written for every Fill().
+   if (mMakeMC) {
+      if (mStMiniMcEvent == nullptr) {
+         LOG_ERROR << "StMiniMcEvent Branch not loaded properly: exiting run loop" << endm;
+         return kStFatal;
+      }
+      if (LoadEvent() == false) {
+         LOG_ERROR << "Could not find miniMC event matching muDST event" << endm;
+         return kStErr;
+      }
    }
 
    if (mInputMode == InputMuDst)
@@ -370,21 +428,20 @@ Int_t TStarJetPicoMaker::MakeMuDst()
    delete mEvent;
    mEvent = nullptr;
 
-   if (mMakeMC)
+   if (mMakeMC) {
       mMCEvent = new TStarJetPicoEvent();
 
-   /*process MC event*/
-   MuProcessMCEvent();
+      /*process MC event*/
+      MuProcessMCEvent();
 
-   /* event is complete - fill the trees */
-   if (mMakeMC) {
+      /* event is complete - fill the trees */
+
       TProcessID::SetObjectCount(0);
       mMCTree->Fill();
+
+      delete mMCEvent;
+      mMCEvent = nullptr;
    }
-
-   delete mMCEvent;
-   mMCEvent = nullptr;
-
    /* count the successful write & exit */
    mNAcceptedEvents++;
 
@@ -540,8 +597,17 @@ Bool_t TStarJetPicoMaker::MuProcessPrimaryTracks()
          continue;
       }
 
-      /* check if track will be saved to event structure */
-      if (muTrack->flag() < mTrackFlagMin || muTrack->nHitsFit() <= mTrackFitPointMin ||
+      /* Dmitry's StjTPCMuDst::getTrackList drops FTPC tracks via
+         topologyMap().trackFtpcEast()/West(). Mirror that veto here so the
+         pre-pico track set has the same FTPC content as his chain. */
+      if (muTrack->topologyMap().trackFtpcEast() || muTrack->topologyMap().trackFtpcWest())
+         continue;
+
+      /* check if track will be saved to event structure
+         NOTE: Dmitry's StjTrackCutNHits operates on StMuTrack::nHits() (total
+         TPC hits), not on nHitsFit. Switched here so user pico's track set
+         matches Dmitry's at the boundary. */
+      if (muTrack->flag() < mTrackFlagMin || muTrack->nHits() <= mTrackFitPointMin ||
           muTrack->dcaGlobal().mag() > mTrackDCAMax || muTrack->eta() > mTrackEtaMax || muTrack->eta() < mTrackEtaMin)
          continue;
       jetTrack.Clear();
@@ -572,7 +638,11 @@ Bool_t TStarJetPicoMaker::MuProcessPrimaryTracks()
       jetTrack.SetNsigmaElectron(muTrack->nSigmaElectron());
       jetTrack.SetCharge(muTrack->charge());
       jetTrack.SetNOfFittedHits(muTrack->nHitsFit());
-      jetTrack.SetNOfPossHits(muTrack->nHitsPoss(kTpcId) + 1); // add one for primary vertex
+      jetTrack.SetNOfPossHits(muTrack->nHitsPoss(kTpcId)); // raw TPC nHitsPoss (Dmitry convention)
+      // NOTE: nHits-based filter applied at LINE 597 via muTrack->nHits().
+      // No fNHits/fLastPointR fields stored (eventStructuredAu unchanged).
+      // Tracks are kept loose enough that systematics studies (e.g. relaxing
+      // the LastPoint cut, varying nHits min) remain feasible at analysis level.
       jetTrack.SetKey(muTrack->id());
       jetTrack.SetChi2(muTrack->chi2xy());
       jetTrack.SetChi2PV(muTrack->chi2z());
@@ -600,7 +670,11 @@ Bool_t TStarJetPicoMaker::MuProcessPrimaryTracks()
       Double_t magField = 0.1 * mMuInputEvent->runInfo().magneticField(); // in Tesla
       StThreeVectorD momentum, position;
       Int_t module, etaBin, phiBin;
-      Bool_t projectToEMC = mEMCPosition->projTrack(&position, &momentum, muTrack, magField);
+      // Dmitry's StjTPCMuDst.cxx:113 projects to BEMC at r=238.6 cm
+      // (slightly behind the SMD shower max). Default StEmcPosition is
+      // 225.405 cm. Use Dmitry's radius for matched-set consistency.
+      const Double_t kBemcProjRadius = 238.6;
+      Bool_t projectToEMC = mEMCPosition->projTrack(&position, &momentum, muTrack, magField, kBemcProjRadius);
       if (!projectToEMC)
          continue;
       Int_t matchToTower = mBEMCGeom->getBin(position.phi(), position.pseudoRapidity(), module, etaBin, phiBin);
@@ -703,8 +777,31 @@ Bool_t TStarJetPicoMaker::MuProcessBEMC()
          Float_t towerEnergy = tow->energy();
          Float_t towerADC = tow->adc();
 
-         if (towerEnergy < mTowerEnergyMin)
+         /* Resolve tower eta/phi up-front so the Et threshold below uses
+            the same E_T = E/cosh(eta) definition as Dmitry's
+            StjTowerEnergyCutEt (his Et test triggers reject on Et<=min). */
+         Float_t towerEta, towerPhi;
+         mBEMCGeom->getEtaPhi(towerID, towerEta, towerPhi);
+
+         /* Threshold matches Dmitry's StjTowerEnergyCutEt(0.2): cut on Et,
+            not on raw energy. Previous "towerEnergy < mTowerEnergyMin"
+            kept low-Et towers at high |eta| that Dmitry rejects. */
+         if ((towerEnergy / TMath::CosH(towerEta)) <= mTowerEnergyMin)
             continue;
+
+         /* Per-tower ADC quality cut (Dmitry's StjTowerEnergyCutAdc(min,sigma)).
+            Require (ADC - pedestal) > mTowerAdcMin AND > mTowerAdcSigma * RMS.
+            Both conditions disabled when min<=0 or sigma<=0. */
+         if (mTowerAdcMin > 0 || mTowerAdcSigma > 0.0) {
+            float pedestal = 0.0f, rms = 0.0f;
+            const int CAP = 0;
+            mBemcTables->getPedestal(BTOW, towerID, CAP, pedestal, rms);
+            const Float_t adcMinusPed = towerADC - pedestal;
+            if (mTowerAdcMin > 0 && adcMinusPed <= mTowerAdcMin)
+               continue;
+            if (mTowerAdcSigma > 0.0 && adcMinusPed <= mTowerAdcSigma * rms)
+               continue;
+         }
 
          Float_t towerEta, towerPhi;
          mBEMCGeom->getEtaPhi(towerID, towerEta, towerPhi);
@@ -713,15 +810,17 @@ Bool_t TStarJetPicoMaker::MuProcessBEMC()
          Int_t ehits = MuFindSMDClusterHits(mEmcCollection, towerEta, towerPhi, 2);
          Int_t phits = MuFindSMDClusterHits(mEmcCollection, towerEta, towerPhi, 3);
 
-         /* correct eta for Vz position */
-         Float_t theta;
-         theta = 2 * atan(exp(-towerEta)); /* getting theta from eta */
-         Double_t z = 0;
-         if (towerEta != 0)
-            z = 231.0 / tan(theta);                                            /* 231 cm = radius of SMD */
-         Double_t zNominal = z - mMuDst->event()->primaryVertexPosition().z(); /* shifted z */
-         Double_t thetaCorr = atan2(231.0, zNominal);  /* theta with respect to primary vertex */
-         Float_t etaCorr = -log(tan(thetaCorr / 2.0)); /* eta with respect to primary vertex */
+         /* Vertex-corrected eta/phi using exact BEMC tower XYZ and the full
+            primary vertex 3-vector. Mirrors Dmitry's StjTowerEnergyToTLorentzVector. */
+         Float_t towerX = 0, towerY = 0, towerZ = 0;
+         mBEMCGeom->getXYZ(towerID, towerX, towerY, towerZ);
+         StThreeVectorF pv3 = mMuDst->event()->primaryVertexPosition();
+         Double_t mx = towerX - pv3.x();
+         Double_t my = towerY - pv3.y();
+         Double_t mz = towerZ - pv3.z();
+         Double_t mr = TMath::Sqrt(mx * mx + my * my + mz * mz);
+         Float_t etaCorr = (mr > 0) ? 0.5 * TMath::Log((mr + mz) / (mr - mz)) : 0.0f;
+         Float_t phiCorr = (mx == 0 && my == 0) ? 0.0f : (Float_t)TMath::ATan2(my, mx);
 
          /* fill tower information */
          jetTower.Clear();
@@ -730,7 +829,7 @@ Bool_t TStarJetPicoMaker::MuProcessBEMC()
          jetTower.SetId(towerID);
          jetTower.SetEnergy(towerEnergy);
          jetTower.SetADC(towerADC);
-         jetTower.SetPhiCorrected(towerPhi); /* not calculated as (x,y) shift of vertex is miniscule */
+         jetTower.SetPhiCorrected(phiCorr);
          jetTower.SetEtaCorrected(etaCorr);
          jetTower.SetSMDClusterP(phits);
          jetTower.SetSMDClusterE(ehits);
@@ -820,14 +919,6 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
    for (int i = 0; i < 3; ++i)
       mEvent->GetHeader()->SetJetPatchThreshold(i, mTriggerSimu->bemc->barrelJetPatchTh(i));
 
-   mEvent->GetHeader()->SetJetPatchThreshold(0, 20);  // jp0
-   mEvent->GetHeader()->SetJetPatchThreshold(1, 28);  // jp1
-   mEvent->GetHeader()->SetJetPatchThreshold(2, 36);  // jp2
-   mEvent->GetHeader()->SetHighTowerThreshold(0, 11); // bht0
-   mEvent->GetHeader()->SetHighTowerThreshold(1, 15); // bht1
-   mEvent->GetHeader()->SetHighTowerThreshold(2, 18); // bht2
-   mEvent->GetHeader()->SetHighTowerThreshold(3, 8);  // bht3
-
    /* get trigger thresholds for HT */
    Int_t bht0 = mTriggerSimu->bemc->barrelHighTowerTh(0);
    Int_t bht1 = mTriggerSimu->bemc->barrelHighTowerTh(1);
@@ -852,9 +943,10 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
       }
       // LOG_INFO << "wisdom: ADC: " << (unsigned) adc << endm;
       // HERE WE MANUALLY ADD THE HT2 TRIGGER IF AT LEAST ONE TOWER IS ABOVE THE BHT2 THRESHOLD. NOT IDEAL BUT OH WELL
-      if (bht2 > 0 && adc > bht2 && count_tows == 0) {
+      // only for embedding
+      if (mMakeMC && bht2 > 0 && adc > bht2 && count_tows == 0) {
          // LOG_INFO << "wisdom: ADDING TRIGGERS FOR EVENT " << endm;
-         mEvent->GetHeader()->AddTriggerId(370531); // zerobias trigger run id < 13077*
+         mEvent->GetHeader()->AddTriggerId(370531);
          count_tows++;
       } // passed the threshold; added the trigger by hand
 
@@ -1043,7 +1135,7 @@ Bool_t TStarJetPicoMaker::MuFillHeader()
    mEvent->GetHeader()->SetZdcEastRate(mMuInputEvent->runInfo().zdcEastRate());
    mEvent->GetHeader()->SetZdcCoincidenceRate(mMuInputEvent->runInfo().zdcCoincidenceRate());
    mEvent->GetHeader()->SetnumberOfVpdEastHits(mMuInputEvent->numberOfVpdEastHits());
-   mEvent->GetHeader()->SetnumberOfVpdEastHits(mMuInputEvent->numberOfVpdEastHits());
+   mEvent->GetHeader()->SetnumberOfVpdWestHits(mMuInputEvent->numberOfVpdWestHits());
    mEvent->GetHeader()->SetBbcWestRate(mMuInputEvent->runInfo().bbcWestRate());
    mEvent->GetHeader()->SetBbcEastRate(mMuInputEvent->runInfo().bbcEastRate());
    mEvent->GetHeader()->SetBbcCoincidenceRate(mMuInputEvent->runInfo().bbcCoincidenceRate());

@@ -1,67 +1,12 @@
 
-#include <iostream>
-#include <fstream>
-#include <string>
+//  Example of how to use TStarJetPicoMaker to produce
+//  a tree of TStarJetPicoEvents
 
-// --- main function ---
-TChain *getMiniMcFromMuDstList(const char *filelist)
-{
-   if (!filelist) {
-      std::cerr << "[getMiniMcFromMuDstList] ERROR: filelist is NULL\n";
-      return 0;
-   }
-
-   std::ifstream in(filelist);
-   if (!in.is_open()) {
-      std::cerr << "[getMiniMcFromMuDstList] ERROR: cannot open list: " << filelist << "\n";
-      return 0;
-   }
-
-   TChain *chain = new TChain("StMiniMcTree");
-
-   std::string line;
-   Long64_t nAdded = 0;
-   Long64_t nLines = 0;
-
-   while (std::getline(in, line)) {
-      ++nLines;
-
-      if (line.empty() || line[0] == '#') {
-         // Skip empty lines and comments
-         continue;
-      }
-      // replace "MuDst.root" with "miniMc.root" at the end of the line
-      const std::string muSuffix = "MuDst.root";
-      const std::string miniSuffix = "minimc.root";
-      if (line.size() < muSuffix.size() || line.substr(line.size() - muSuffix.size()) != muSuffix) {
-         // Did not match the expected suffix; warn and skip
-         std::cerr << "[getMiniMcFromMuDstList] WARN line " << nLines
-                   << ": not a MuDst path (no trailing \"MuDst.root\"): " << line << "\n";
-         continue;
-      }
-
-      std::string miniPath = line.substr(0, line.size() - muSuffix.size()) + miniSuffix;
-
-      // Optional: check that the file exists (ROOT-style); comment out if not desired
-      if (gSystem->AccessPathName(miniPath.c_str())) {
-         std::cerr << "[getMiniMcFromMuDstList] WARN: file not found -> " << miniPath << "\n";
-         continue;
-      }
-
-      chain->Add(miniPath.c_str());
-      ++nAdded;
-   }
-
-   std::cout << "[getMiniMcFromMuDstList] Added " << nAdded << " MiniMc files from " << nLines << " lines in "
-             << filelist << "\n";
-
-   if (nAdded == 0) {
-      std::cerr << "[getMiniMcFromMuDstList] ERROR: no files added; returning NULL\n";
-      delete chain;
-      return 0;
-   }
-   return chain;
-}
+//  this macro produces TStarJetPicoEvents from STAR muDSTs.
+//  Requires the STAR libraries & muDST files. Defaults
+//  are set to a test production using the test.list file
+//  ( 10 files located on distributed disk from y14 high
+//  luminosity production )
 
 void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outputName = "test")
 {
@@ -98,12 +43,13 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    gSystem->Load("libTStarJetPico.so");
    gSystem->Load("libTStarJetPicoMaker.so");
 
+   // Internal log suppression (no stream splitting):
+   //   1) drop the TRefTable::Add "SetParent must be called" spam
+   //   2) silence StTriggerSimuMaker INFO chatter
+   TStarJetPicoMaker::SuppressTRefTableNoise();
+   TStarJetPicoMaker::SetLoggerLevel("StTriggerSimuMaker", "WARN");
+
    StChain *chain = new StChain("StChain");
-   TChain *mcChain = getMiniMcFromMuDstList(filelist);
-   if (!mcChain) {
-      cout << "No MiniMc chain returned. Exiting." << endl;
-      return;
-   }
 
    StMuDstMaker *muDstMaker = new StMuDstMaker(0, 0, "", filelist, "", nFiles);
 
@@ -132,21 +78,46 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    trigsim->useOnlineDB();
    trigsim->bemc->setConfig(StBemcTriggerSimu::kOffline);
 
-   TStarJetPicoMaker *jetPicoMaker =
-      new TStarJetPicoMaker(Form("%s.root", outputName), mcChain, 1, outputName, nFiles, trigSet);
-   jetPicoMaker->ProcessMC(1);
-   jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::VpdOrRank);
-   jetPicoMaker->SetTowerAcceptMode(TStarJetPicoMaker::RejectBadTowerStatus);
+   TStarJetPicoMaker *jetPicoMaker = new TStarJetPicoMaker(Form("%s.root", outputName));
+   jetPicoMaker->SetInputSource(TStarJetPicoMaker::InputMuDst);
+   jetPicoMaker->ProcessMC(0); // 0 = data, 1 = MC; LoadMuDst aborts if MC requested without StMiniMcEvent
+   // jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::VpdOrRank);
+   jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::Rank);
+   jetPicoMaker->SetTowerAcceptMode(
+      TStarJetPicoMaker::RejectBadTowerStatus); // matches Dmitry's StjTowerEnergyCutBemcStatus(1)
    jetPicoMaker->SetStRefMultCorrMode(TStarJetPicoMaker::FillNone);
-   jetPicoMaker->EventCuts()->SetVzRange(-30, 30);
+   // Vz: kept at ±80 here; the production analysis (ppAnalysis::VzCut) tightens to ±60 to match Dmitry.
+   jetPicoMaker->EventCuts()->SetVzRange(-80, 80);
    jetPicoMaker->EventCuts()->SetRefMultRange(0, 7000);
-   jetPicoMaker->SetTowerEnergyMin(0.15);
-   jetPicoMaker->SetTrackEtaRange(-1.5, 1.5);
-   jetPicoMaker->SetTrackFitPointMin(10);
+   // Tower ET threshold: Dmitry uses 0.20 GeV (StjTowerEnergyCutEt(0.2)); raised from 0.15 to match.
+   // Note: existing picos produced with 0.15 will need re-production to gain the tighter cut.
+   jetPicoMaker->SetTowerEnergyMin(0.20);
+   // Per-tower ADC quality cut, mirrors Dmitry's StjTowerEnergyCutAdc(4, 3):
+   //   require (ADC - pedestal) > 4 AND (ADC - pedestal) > 3·RMS.
+   // Hot-tower handling layered with the DB tower-status flag (BTOW status != 1)
+   // already checked via SetTowerAcceptMode(RejectBadTowerStatus) above; this
+   // ADC cut filters transient pedestal-noise spikes that pass the energy
+   // threshold but lack real signal.
+   jetPicoMaker->SetTowerAdcCut(4, 3.0);
+   // Tracks: |η|<2.5, FitPointMin=12 (Dmitry's NHits>=12), DCA<=3 cm. Stage B (RunppAna) re-applies the same.
+   jetPicoMaker->SetTrackEtaRange(-2.5, 2.5);
+   jetPicoMaker->SetTrackFitPointMin(12);
    jetPicoMaker->SetTrackDCAMax(3.0);
    jetPicoMaker->SetTrackFlagMin(0);
 
-   //  set DEBUG output level
+   // jetPicoMaker->EventCuts()->AddTrigger(370531); // HT2
+   // jetPicoMaker->EventCuts()->AddTrigger(370621); // JP2
+   // jetPicoMaker->EventCuts()->AddTrigger(370011); // MB
+
+   jetPicoMaker->EventCuts()->AddTrigger(370601); // JP0
+   jetPicoMaker->EventCuts()->AddTrigger(370611); // JP1
+   jetPicoMaker->EventCuts()->AddTrigger(370621); // JP2
+   // jetPicoMaker->EventCuts()->AddTrigger(370982); // JP2*L2JetHigh
+   // jetPicoMaker->EventCuts()->AddTrigger(370641); // AJP
+   // jetPicoMaker->EventCuts()->AddTrigger(370001); // VPDMB
+   // jetPicoMaker->EventCuts()->AddTrigger(370011); // VPDMB-nobsmd
+   // jetPicoMaker->EventCuts()->AddTrigger(370021); // BBCMB
+   // jetPicoMaker->EventCuts()->AddTrigger(370022); // BBCMB
 
    cout << "DEBUG C" << endl;
 
@@ -176,7 +147,7 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
 
    chain->ls(3);
    chain->Finish();
-   printf("my macro processed %i events in %s", i, nametag);
+   printf("my macro processed %i events", i);
    cout << "\tcpu: " << total.CpuTime() << "\treal: " << total.RealTime()
         << "\tratio: " << total.CpuTime() / total.RealTime() << endl;
 
