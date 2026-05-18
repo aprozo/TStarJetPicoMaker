@@ -1,5 +1,7 @@
 # ignore lists for git
 
+*Dict.cxx
+
 # that weird crap emacs generates
 *~
 

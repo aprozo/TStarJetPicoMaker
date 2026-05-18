@@ -59,11 +59,12 @@ struct BemcMatch {
   Double_t trackPhi;
   Double_t matchEta;
   Double_t matchPhi;
+  Int_t matchedTowerId; // Dmitry-style: STAR-DB tower ID the track projects to.
 
-  BemcMatch() : globalId(-1), trackId(-1), trackEta(0.0), trackPhi(0.0), matchEta(0.0), matchPhi(0.0) {};
-  BemcMatch(int id, int trkId, double trackEta, double trackPhi, double matchEta, double matchPhi) :
-  globalId(id), trackId(trkId), trackEta(trackEta), trackPhi(trackPhi), matchEta(matchEta), matchPhi(matchPhi) {};
-  
+  BemcMatch() : globalId(-1), trackId(-1), trackEta(0.0), trackPhi(0.0), matchEta(0.0), matchPhi(0.0), matchedTowerId(-1) {};
+  BemcMatch(int id, int trkId, double trackEta, double trackPhi, double matchEta, double matchPhi, int towerId = -1) :
+  globalId(id), trackId(trkId), trackEta(trackEta), trackPhi(trackPhi), matchEta(matchEta), matchPhi(matchPhi), matchedTowerId(towerId) {};
+
 };
 
 class TStarJetPicoMaker : public StMaker {

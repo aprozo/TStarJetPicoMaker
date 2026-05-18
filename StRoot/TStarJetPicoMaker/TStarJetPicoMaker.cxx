@@ -604,12 +604,11 @@ Bool_t TStarJetPicoMaker::MuProcessPrimaryTracks()
       if (muTrack->topologyMap().trackFtpcEast() || muTrack->topologyMap().trackFtpcWest())
          continue;
 
-      /* check if track will be saved to event structure
-         NOTE: Dmitry's StjTrackCutNHits operates on StMuTrack::nHits() (total
-         TPC hits), not on nHitsFit. Switched here so user pico's track set
-         matches Dmitry's at the boundary. */
-      if (muTrack->flag() < mTrackFlagMin || muTrack->nHits() <= mTrackFitPointMin ||
-          muTrack->dcaGlobal().mag() > mTrackDCAMax || muTrack->eta() > mTrackEtaMax || muTrack->eta() < mTrackEtaMin)
+      /* check if track will be saved to event structure.
+         Dmitry-aligned: cut on nHits() (total TPC hits) and dcaD() (transverse DCA),
+         not on nHitsFit() and dcaGlobal().mag() (3D). See feedback-picomaker-alignment-traps. */
+      if (muTrack->flag() < mTrackFlagMin || muTrack->nHits() <= mTrackFitPointMin || muTrack->dcaD() > mTrackDCAMax ||
+          muTrack->eta() > mTrackEtaMax || muTrack->eta() < mTrackEtaMin)
          continue;
 
       /* Dmitry's StjTrackCutLastPoint(125): reject tracks whose last fit hit
@@ -617,7 +616,7 @@ Bool_t TStarJetPicoMaker::MuProcessPrimaryTracks()
          stored in the pico schema. Disabled when mTrackLastPointMin <= 0. */
       if (mTrackLastPointMin > 0.0) {
          const StThreeVectorF &lp = muTrack->lastPoint();
-         const double rLast = std::sqrt(lp.x()*lp.x() + lp.y()*lp.y());
+         const double rLast = std::sqrt(lp.x() * lp.x() + lp.y() * lp.y());
          if (rLast <= mTrackLastPointMin)
             continue;
       }
@@ -635,13 +634,11 @@ Bool_t TStarJetPicoMaker::MuProcessPrimaryTracks()
          // LOG_INFO << "UNDEFINED PICO PZ (primary track " << (unsigned) i << ") in event " << (unsigned)
          // mMuDst->event()->eventId() << " of run " << (unsigned) mMuDst->event()->runId() << endm;
       }
-      if (/*mMuDst->event()*/ mMuInputEvent->eventId() == 2820 &&
-          /*mMuDst->event()*/ mMuInputEvent->runId() == 16143009) {
-         // LOG_INFO << "WRONG SIDE OF THE TRACKS! primary track " << (unsigned) i << " has mupz " << (unsigned)
-         // muTrack->momentum().z() << " and picopz " << (unsigned) jetTrack.GetPz() << endm;
-      }
 
-      jetTrack.SetDCA(muTrack->dcaGlobal().mag());
+      // Store transverse DCA (Dmitry's StjTPCMuDst.cxx:104 convention).
+      // Downstream RunppAna's StjTrackCutDcaPtDependent applies the pt-dependent
+      // cut on this value — must be transverse, not 3D, to match Dmitry.
+      jetTrack.SetDCA(muTrack->dcaD());
       jetTrack.SetdEdx(muTrack->dEdx());
       jetTrack.SetNsigmaPion(muTrack->nSigmaPion());
       jetTrack.SetNsigmaKaon(muTrack->nSigmaKaon());
@@ -692,9 +689,17 @@ Bool_t TStarJetPicoMaker::MuProcessPrimaryTracks()
       if (matchToTower == 1 || phiBin < 0)
          continue;
 
+      // Dmitry-style: resolve projected (phi, eta) to the actual STAR tower ID
+      // via StEmcGeom::getId. Stored in BemcMatch so the per-tower match loop
+      // below can compare exact tower IDs instead of geometric Delta-Eta/Delta-Phi
+      // to tower center (which gives different matches at tower boundaries).
+      Int_t matchedTowerIdLocal = -1;
+      mBEMCGeom->getId(position.phi(), position.pseudoRapidity(), matchedTowerIdLocal);
+
       /* save track & track BEMC position info */
-      mBemcMatchedTracks[matchedTracks] = BemcMatch(i, mEvent->GetHeader()->GetNOfPrimaryTracks() - 1, muTrack->eta(),
-                                                    muTrack->phi(), position.pseudoRapidity(), position.phi());
+      mBemcMatchedTracks[matchedTracks] =
+         BemcMatch(i, mEvent->GetHeader()->GetNOfPrimaryTracks() - 1, muTrack->eta(), muTrack->phi(),
+                   position.pseudoRapidity(), position.phi(), matchedTowerIdLocal);
       matchedTracks++;
    }
 
@@ -850,15 +855,19 @@ Bool_t TStarJetPicoMaker::MuProcessBEMC()
             if (match.globalId == -1)
                continue;
 
-            Double_t halfTowerWidth = 0.025;
+            // Dmitry-style tower-ID match (see StjTowerEnergyCorrectionForTracksFraction.cxx:21):
+            // a track contributes to this tower iff the projected exitTowerId matches.
+            // This replaces the geometric Delta-Eta/Delta-Phi < 0.025 criterion, which
+            // gave different matches at tower boundaries (geometric checks distance to
+            // tower CENTER; STAR getId partitions on actual tower boundaries).
+            if (match.matchedTowerId != towerID)
+               continue;
             Double_t dEta = match.matchEta - towerEta;
             Double_t dPhi = match.matchPhi - towerPhi;
             while (dPhi > TMath::Pi())
-               dPhi -= TMath::Pi();
+               dPhi -= 2.0 * TMath::Pi();
             while (dPhi < -TMath::Pi())
-               dPhi += TMath::Pi();
-            if (fabs(dEta) > halfTowerWidth || fabs(dPhi) > halfTowerWidth)
-               continue;
+               dPhi += 2.0 * TMath::Pi();
             nMatchedTracks++;
             mBemcMatchedTracks[k].globalId = -1;
             jetTower.AddMatchedTrack(match.trackId);
@@ -1022,14 +1031,35 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
    // LOG_INFO << "Jet Patch trigger thresholds: jp0 " << jp0 << " jp1: " << jp1 << " jp2: " << jp2 << endm;
 
    /* lookup 12 jet patches & 6 overlap thresholds - no EEMC data saved */
-   bool count_patches = 0;
+   bool injected_jp0 = false;
+   bool injected_jp1 = false;
+   bool injected_jp2 = false;
    for (unsigned jp = 0; jp < 18; ++jp) {
       const Int_t jpAdc = mTriggerSimu->bemc->barrelJetPatchAdc(jp);
-
-      if (jp2 > 0 && jpAdc > jp2 && count_patches == 0) {
-         // add triggers
+      // For MC/embedding only: synthesise didFire by injecting the JP-trigger
+      // id when TriggerSimu sees the patch above threshold.  For real data,
+      // didFire bits come from the hardware trigger collection
+      // (triggerIdCollection.nominal()); injecting them from TriggerSimu here
+      // corrupts didFire into a simu-fired duplicate, causing isTriggerEvent
+      // = didFire AND simu_fired to degenerate to simu_fired AND simu_fired
+      // in RunppAna (compare_raw_jets_JP2 diagnosis 2026-05-14).
+      //
+      // We inject ALL three JP IDs (JP0=370601, JP1=370611, JP2=370621)
+      // when their respective thresholds fire — this lets one embedding
+      // production drive the JP0/JP1/JP2 cross-section chains uniformly,
+      // each with its own trigger ID present in the header for RunppAna's
+      // event_triggers.count(trig_id) gate.
+      if (mMakeMC && jp0 > 0 && jpAdc > jp0 && !injected_jp0) {
+         mEvent->GetHeader()->AddTriggerId(370601);
+         injected_jp0 = true;
+      }
+      if (mMakeMC && jp1 > 0 && jpAdc > jp1 && !injected_jp1) {
+         mEvent->GetHeader()->AddTriggerId(370611);
+         injected_jp1 = true;
+      }
+      if (mMakeMC && jp2 > 0 && jpAdc > jp2 && !injected_jp2) {
          mEvent->GetHeader()->AddTriggerId(370621);
-         count_patches++;
+         injected_jp2 = true;
       }
 
       std::bitset<32> trigMap; // default = 0

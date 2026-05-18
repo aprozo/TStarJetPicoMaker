@@ -108,9 +108,7 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    // Applied at production; no schema change to TStarJetPicoPrimaryTrack required.
    jetPicoMaker->SetTrackLastPointMin(125.0);
 
-   // jetPicoMaker->EventCuts()->AddTrigger(370531); // HT2
-   // jetPicoMaker->EventCuts()->AddTrigger(370621); // JP2
-   // jetPicoMaker->EventCuts()->AddTrigger(370011); // MB
+   jetPicoMaker->EventCuts()->AddTrigger(370531); // HT2
 
    jetPicoMaker->EventCuts()->AddTrigger(370601); // JP0
    jetPicoMaker->EventCuts()->AddTrigger(370611); // JP1
