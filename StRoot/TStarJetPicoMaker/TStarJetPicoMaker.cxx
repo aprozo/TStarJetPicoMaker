@@ -607,7 +607,7 @@ Bool_t TStarJetPicoMaker::MuProcessPrimaryTracks()
       /* check if track will be saved to event structure.
          Dmitry-aligned: cut on nHits() (total TPC hits) and dcaD() (transverse DCA),
          not on nHitsFit() and dcaGlobal().mag() (3D). See feedback-picomaker-alignment-traps. */
-      if (muTrack->flag() < mTrackFlagMin || muTrack->nHits() <= mTrackFitPointMin || muTrack->dcaD() > mTrackDCAMax ||
+      if (muTrack->flag() < mTrackFlagMin || muTrack->nHits() <= mTrackFitPointMin || muTrack->dcaGlobal().mag() > mTrackDCAMax ||
           muTrack->eta() > mTrackEtaMax || muTrack->eta() < mTrackEtaMin)
          continue;
 
@@ -634,11 +634,7 @@ Bool_t TStarJetPicoMaker::MuProcessPrimaryTracks()
          // LOG_INFO << "UNDEFINED PICO PZ (primary track " << (unsigned) i << ") in event " << (unsigned)
          // mMuDst->event()->eventId() << " of run " << (unsigned) mMuDst->event()->runId() << endm;
       }
-
-      // Store transverse DCA (Dmitry's StjTPCMuDst.cxx:104 convention).
-      // Downstream RunppAna's StjTrackCutDcaPtDependent applies the pt-dependent
-      // cut on this value — must be transverse, not 3D, to match Dmitry.
-      jetTrack.SetDCA(muTrack->dcaD());
+      jetTrack.SetDCA(muTrack->dcaGlobal().mag());
       jetTrack.SetdEdx(muTrack->dEdx());
       jetTrack.SetNsigmaPion(muTrack->nSigmaPion());
       jetTrack.SetNsigmaKaon(muTrack->nSigmaKaon());
