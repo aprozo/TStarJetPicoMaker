@@ -1,0 +1,165 @@
+
+//  Example of how to use TStarJetPicoMaker to produce
+//  a tree of TStarJetPicoEvents WITH EEMC endcap towers appended.
+//
+//  This is a clone of makeTStarJetPico.cxx (the validated BEMC-only data
+//  production) with the single guarded addition jetPicoMaker->SetUseEemc(true).
+//  Everything else (chain, makers, cuts) is byte-identical to the BEMC-only
+//  macro. The StEEmcDbMaker("eemcDb") that the EEMC tower loop reads is already
+//  created below (same as the BEMC-only macro), so no extra maker is needed.
+//  Do NOT use this macro for the validated BEMC-only production tag — use
+//  makeTStarJetPico.cxx for that.
+
+void makeTStarJetPicoEemc(const char *filelist = "lists/test.list", const char *outputName = "test")
+{
+   const int nEvents = 1e9;
+   const int nFiles = 1e9;
+   const int trigSet = 0;
+   // load STAR libraries
+   gROOT->Macro("LoadLogger.C");
+   gROOT->Macro("loadMuDst.C");
+   gSystem->Load("StarMagField.so");
+   gSystem->Load("StMagF");
+   gSystem->Load("StDetectorDbMaker");
+   gSystem->Load("StTpcDb");
+   gSystem->Load("St_db_Maker");
+   gSystem->Load("StDbUtilities");
+   gSystem->Load("StMiniMcEvent");
+   gSystem->Load("StMiniMcMaker");
+   gSystem->Load("StDaqLib");
+   gSystem->Load("StEmcRawMaker");
+   gSystem->Load("StEmcADCtoEMaker");
+   gSystem->Load("StEpcMaker");
+   gSystem->Load("StTriggerUtilities");
+   gSystem->Load("StDbBroker");
+   gSystem->Load("libgeometry_Tables");
+   gSystem->Load("StEEmcUtil");
+   gSystem->Load("StEEmcDbMaker");
+   gSystem->Load("StPreEclMaker");
+   gSystem->Load("StEpcMaker");
+   gSystem->Load("StPicoEvent.so");
+   gSystem->Load("StPicoDstMaker.so");
+
+   gSystem->AddDynamicPath("./libs/"); // add local libs to path
+   gSystem->Load("libStRefMultCorr.so");
+   gSystem->Load("libTStarJetPico.so");
+   gSystem->Load("libTStarJetPicoMaker.so");
+
+   // Internal log suppression (no stream splitting):
+   //   1) drop the TRefTable::Add "SetParent must be called" spam
+   //   2) silence StTriggerSimuMaker INFO chatter
+   TStarJetPicoMaker::SuppressTRefTableNoise();
+   TStarJetPicoMaker::SetLoggerLevel("StTriggerSimuMaker", "WARN");
+
+   StChain *chain = new StChain("StChain");
+
+   StMuDstMaker *muDstMaker = new StMuDstMaker(0, 0, "", filelist, "", nFiles);
+
+   St_db_Maker *dbMaker = new St_db_Maker("StarDb", "MySQL:StarDb");
+   // StMiniMcMaker* mcMaker = new StMiniMcMaker();
+   StEEmcDbMaker *eemcb = new StEEmcDbMaker("eemcDb");
+   StEmcADCtoEMaker *adc = new StEmcADCtoEMaker();
+   StPreEclMaker *pre_ecl = new StPreEclMaker();
+   StEpcMaker *epc = new StEpcMaker();
+
+   // get control table so we can turn off BPRS zero-suppression and save hits from "bad" caps
+   controlADCtoE_st *control_table = adc->getControlTable();
+   control_table->CutOff[1] = -1;
+   control_table->CutOffType[1] = 0;
+   control_table->DeductPedestal[1] = 2;
+   adc->saveAllStEvent(kTRUE);
+
+   cout << "DEBUG B" << endl;
+
+   // simulates a trigger response based on an ADC value & trigger definitions
+   StTriggerSimuMaker *trigsim = new StTriggerSimuMaker();
+   trigsim->setMC(false); // CHANGE IF GOING BACK TO DATA!!
+   trigsim->useBemc();
+   trigsim->useEemc();
+   trigsim->useBbc();
+   trigsim->useOnlineDB();
+   trigsim->bemc->setConfig(StBemcTriggerSimu::kOffline);
+
+   TStarJetPicoMaker *jetPicoMaker = new TStarJetPicoMaker(Form("%s.root", outputName));
+   jetPicoMaker->SetInputSource(TStarJetPicoMaker::InputMuDst);
+   jetPicoMaker->ProcessMC(0); // 0 = data, 1 = MC; LoadMuDst aborts if MC requested without StMiniMcEvent
+   // jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::VpdOrRank);
+   jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::Rank);
+   jetPicoMaker->SetTowerAcceptMode(
+      TStarJetPicoMaker::RejectBadTowerStatus); // matches Dmitry's StjTowerEnergyCutBemcStatus(1)
+   jetPicoMaker->SetStRefMultCorrMode(TStarJetPicoMaker::FillNone);
+   // EEMC endcap towers appended (detEta ~1.086..2.0). This is the ONLY
+   // difference from makeTStarJetPico.cxx.
+   jetPicoMaker->SetUseEemc(true);
+   // Vz: kept at ±80 here; the production analysis (ppAnalysis::VzCut) tightens to ±60 to match Dmitry.
+   jetPicoMaker->EventCuts()->SetVzRange(-80, 80);
+   jetPicoMaker->EventCuts()->SetRefMultRange(0, 7000);
+   // Tower ET threshold: Dmitry uses 0.20 GeV (StjTowerEnergyCutEt(0.2)); raised from 0.15 to match.
+   // Note: existing picos produced with 0.15 will need re-production to gain the tighter cut.
+   jetPicoMaker->SetTowerEnergyMin(0.20);
+   // Per-tower ADC quality cut, mirrors Dmitry's StjTowerEnergyCutAdc(4, 3):
+   //   require (ADC - pedestal) > 4 AND (ADC - pedestal) > 3·RMS.
+   // Hot-tower handling layered with the DB tower-status flag (BTOW status != 1)
+   // already checked via SetTowerAcceptMode(RejectBadTowerStatus) above; this
+   // ADC cut filters transient pedestal-noise spikes that pass the energy
+   // threshold but lack real signal.
+   jetPicoMaker->SetTowerAdcCut(4, 3.0);
+   // Tracks: |η|<2.5, FitPointMin=12 (Dmitry's NHits>=12), DCA<=3 cm. Stage B (RunppAna) re-applies the same.
+   jetPicoMaker->SetTrackEtaRange(-2.5, 2.5);
+   jetPicoMaker->SetTrackFitPointMin(12);
+   jetPicoMaker->SetTrackDCAMax(3.0);
+   jetPicoMaker->SetTrackFlagMin(0);
+   // Dmitry's StjTrackCutLastPoint(125): reject tracks with last-fit-point r<=125.
+   // Applied at production; no schema change to TStarJetPicoPrimaryTrack required.
+   jetPicoMaker->SetTrackLastPointMin(125.0);
+
+   jetPicoMaker->EventCuts()->AddTrigger(370531); // HT2
+
+   jetPicoMaker->EventCuts()->AddTrigger(370601); // JP0
+   jetPicoMaker->EventCuts()->AddTrigger(370611); // JP1
+   jetPicoMaker->EventCuts()->AddTrigger(370621); // JP2
+   // jetPicoMaker->EventCuts()->AddTrigger(370982); // JP2*L2JetHigh
+   // jetPicoMaker->EventCuts()->AddTrigger(370641); // AJP
+   // jetPicoMaker->EventCuts()->AddTrigger(370001); // VPDMB
+   // jetPicoMaker->EventCuts()->AddTrigger(370011); // VPDMB-nobsmd
+   // jetPicoMaker->EventCuts()->AddTrigger(370021); // BBCMB
+   // jetPicoMaker->EventCuts()->AddTrigger(370022); // BBCMB
+
+   cout << "DEBUG C" << endl;
+
+   if (chain->Init()) {
+      cout << "StChain failed init: exiting" << endl;
+      return;
+   }
+   cout << "chain initialized" << endl;
+
+   TStopwatch total;
+   TStopwatch timer;
+
+   int i = 0;
+   cout << "DEBUG E" << endl;
+   while (i < nEvents && chain->Make() == kStOk) {
+      // cout << "DEBUG F" << endl;
+      if (i % 500 == 0) {
+         cout << "done with event " << i;
+         cout << "\tcpu: " << timer.CpuTime() << "\treal: " << timer.RealTime()
+              << "\tratio: " << timer.CpuTime() / timer.RealTime(); //<<endl;
+         timer.Start();
+         // memory.PrintMem( NULL );
+      }
+      i++;
+      chain->Clear();
+   }
+
+   chain->ls(3);
+   chain->Finish();
+   printf("my macro processed %i events", i);
+   cout << "\tcpu: " << total.CpuTime() << "\treal: " << total.RealTime()
+        << "\tratio: " << total.CpuTime() / total.RealTime() << endl;
+
+   cout << endl;
+   cout << "-------------" << endl;
+   cout << "(-: Done :-) " << endl;
+   cout << "-------------" << endl;
+   cout << endl;
+}

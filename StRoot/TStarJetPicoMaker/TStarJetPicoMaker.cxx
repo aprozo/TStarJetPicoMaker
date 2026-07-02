@@ -31,6 +31,10 @@
 #include "tables/St_emcStatus_Table.h"
 #include "tables/St_smdStatus_Table.h"
 #include "StMuDSTMaker/COMMON/StMuEmcCollection.h"
+#include "StEEmcUtil/database/StEEmcDb.h"
+#include "StEEmcUtil/database/EEmcDbItem.h"
+#include "StEEmcUtil/EEmcGeom/EEmcGeomSimple.h"
+#include "TVector3.h"
 #include "StEmcCollection.h"
 #include "StEmcCluster.h"
 #include "StMuDSTMaker/COMMON/StMuEmcPoint.h"
@@ -129,6 +133,7 @@ ClassImp(TStarJetPicoMaker)
      mInputMode(input),
      mVertexMode(VpdOrRank),
      mTowerStatusMode(AcceptAllTowers),
+     mUseEemc(false),
      mRefMultCorrMode(FillNone),
      mdVzMax(9999999.0 /*not used*/),
      mTrackFlagMin(0),
@@ -414,6 +419,11 @@ Int_t TStarJetPicoMaker::MakeMuDst()
    if (!MuProcessBEMC())
       return kStOk;
 
+   /* optional EEMC endcap towers (guarded, default OFF). Runs AFTER
+      MuProcessBEMC has set NOfMatchedTracks/Towers, so the OFF path is
+      byte-identical to the validated BEMC-only production. */
+   if (mUseEemc)
+      MuProcessEEMC();
 
    /* process triggers */
    MuProcessTriggerObjects();
@@ -889,6 +899,81 @@ Bool_t TStarJetPicoMaker::MuProcessBEMC()
    mEvent->GetHeader()->SetNOfMatchedTracks(nMatchedTracks);
    mEvent->GetHeader()->SetNOfMatchedTowers(nMatchedTowers);
 
+   return kTRUE;
+}
+
+Bool_t TStarJetPicoMaker::MuProcessEEMC()
+{
+   // Endcap raw ADC comes from the MuDst StMuEmcCollection (NOT the StEvent EMC
+   // endcap detector and NOT an A2E maker); ADC->E is done by hand from StEEmcDb,
+   // exactly as Dmitry's StjEEMCMuDst. StEEmcDbMaker("eemcDb") (created in both
+   // macros) deposits the "StEEmcDb" dataset.
+   StMuEmcCollection *muEmc = (StMuEmcCollection *)mMuDst->muEmcCollection();
+   StEEmcDb *eeDb = (StEEmcDb *)GetChain()->GetDataSet("StEEmcDb");
+   if (!muEmc || !eeDb) {
+      LOG_WARN << "MuProcessEEMC: no muEmcCollection or StEEmcDb -> skipping EEMC" << endm;
+      return kFALSE;
+   }
+   eeDb->setThreshold(3); // thr = ped + 3*sigPed (idempotent; mirrors StjEEMCMuDst::Init)
+
+   const EEmcGeomSimple &geom = EEmcGeomSimple::Instance();
+   StThreeVectorF pv3 = mMuDst->event()->primaryVertexPosition();
+
+   TStarJetPicoTower jetTower;
+   const int nEnd = muEmc->getNEndcapTowerADC();
+   for (int idu = 0; idu < nEnd; ++idu) {
+      int rawadc = 0, sec = 0, sub = 0, etabin = 0;
+      muEmc->getEndcapTowerADC(idu, rawadc, sec, sub, etabin);
+      if (rawadc < 0 || rawadc >= 4095) continue;
+      if (sec < 1 || sec > 12 || sub < 1 || sub > 5 || etabin < 1 || etabin > 12) continue;
+
+      const EEmcDbItem *db = eeDb->getT(sec, sub - 1 + 'A', etabin);
+      if (!db) continue;
+      if (db->fail) continue;            // broken channel
+      if (db->stat) continue;            // not-working / jumpy-ped channel
+      if (db->gain <= 0.) continue;
+      if (rawadc < db->thr) continue;    // raw ADC < ped + 3*sigPed
+
+      double energy = (rawadc - db->ped) / db->gain;
+      if (energy < 0.01) continue;       // < 10 MeV
+
+      // Geometric tower center (cm); 0-based indices, exactly as StjEEMCMuDst.
+      TVector3 tc = geom.getTowerCenter(sec - 1, sub - 1, etabin - 1);
+      Float_t towerEta = tc.Eta();       // ~1.086 .. 2.0
+      Float_t towerPhi = tc.Phi();
+
+      // Et cut, same E_T = E/cosh(eta) convention as the BEMC loop (line 817).
+      if ((energy / TMath::CosH(towerEta)) <= mTowerEnergyMin) continue;
+
+      // Vertex-corrected eta/phi: identical algebra to the BEMC loop (841-849).
+      Double_t mx = tc.X() - pv3.x();
+      Double_t my = tc.Y() - pv3.y();
+      Double_t mz = tc.Z() - pv3.z();
+      Double_t mr = TMath::Sqrt(mx * mx + my * my + mz * mz);
+      Float_t etaCorr = (mr > 0) ? 0.5 * TMath::Log((mr + mz) / (mr - mz)) : 0.0f;
+      Float_t phiCorr = (mx == 0 && my == 0) ? 0.0f : (Float_t)TMath::ATan2(my, mx);
+
+      // EEMC tower id = 10000 + Dmitry's (sec-1)*60+(sub-1)*12+(etabin-1) [0..719]
+      // -> 10000..10719. Disjoint from BEMC 1..4800, so the downstream BEMC
+      // bad-tower mask (TStarJetPicoTowerCuts: badTowers.count(id), a BEMC list)
+      // can never reject these and they never collide with a BEMC id.
+      Int_t towerID = 10000 + (sec - 1) * 60 + (sub - 1) * 12 + (etabin - 1);
+
+      jetTower.Clear();
+      jetTower.SetId(towerID);
+      jetTower.SetEnergy((Float_t)energy);
+      jetTower.SetADC(rawadc);
+      jetTower.SetEta(towerEta);
+      jetTower.SetPhi(towerPhi);
+      jetTower.SetEtaCorrected(etaCorr);
+      jetTower.SetPhiCorrected(phiCorr);
+      jetTower.SetSMDClusterP(0);
+      jetTower.SetSMDClusterE(0);
+      jetTower.SetTowerStatus(1);        // DB quality (fail/stat/gain/thr) already enforced -> mark good
+      // No track matching for EEMC -> GetNAssocTracks()==0 -> reader applies no
+      // MIP/hadronic subtraction (correct neutral-EEMC treatment).
+      mEvent->AddTower(&jetTower);       // auto-increments header NOfTowers
+   }
    return kTRUE;
 }
 

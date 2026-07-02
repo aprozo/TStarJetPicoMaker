@@ -48,6 +48,7 @@ class StRefMultCorr;
 class StBemcTables;
 class StEmcCollection;
 class StEmcCluster;
+class StEEmcDb;
 
 /*  Used to store track & tower matching 
     information between computation steps
@@ -184,6 +185,9 @@ public:
    */
   void SetTowerAdcCut(int min, double sigma) {mTowerAdcMin = min; mTowerAdcSigma = sigma;}
 
+  /* Append EEMC endcap towers (detEta ~1.086..2.0) to the event tower array.
+     Default OFF */
+  void SetUseEemc(bool flag) {mUseEemc = flag;}
 
   /* Raise a named log4cxx logger's threshold so messages below `level`
      are dropped at the source (no awk filtering needed). `level` is one
@@ -219,6 +223,7 @@ public:
   Float_t ComputeXY(const StThreeVectorF& pos, const StPhysicalHelixD &helix);
   
   Bool_t MuProcessBEMC();
+  Bool_t MuProcessEEMC();
   Bool_t PicoProcessBEMC();
   Int_t  MuFindSMDClusterHits(StEmcCollection* coll, Double_t eta, Double_t phi, Int_t detectorID);
   
@@ -294,6 +299,7 @@ public:
   
   towerMode  mTowerStatusMode;
 
+  bool mUseEemc; ///< Append EEMC endcap towers (default false)
 
   refMultCorrectionMode mRefMultCorrMode;
   
