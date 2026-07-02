@@ -184,6 +184,7 @@ public:
    */
   void SetTowerAdcCut(int min, double sigma) {mTowerAdcMin = min; mTowerAdcSigma = sigma;}
 
+
   /* Raise a named log4cxx logger's threshold so messages below `level`
      are dropped at the source (no awk filtering needed). `level` is one
      of "DEBUG","INFO","WARN","ERROR","FATAL" — case-sensitive.
@@ -268,6 +269,7 @@ public:
   StPicoDst*          mPicoDst;
   StPicoEvent*        mPicoInputEvent;
   StTriggerSimuMaker* mTriggerSimu;
+  StTriggerSimuMaker*             mTriggerSimuHW; // kOnline instance (hardware-equivalent JP patches)
   //StMcEvent*          mStMCEvent;
     
   StMiniMcEvent* mStMiniMcEvent;
@@ -291,7 +293,8 @@ public:
   vertexMode mVertexMode;
   
   towerMode  mTowerStatusMode;
-  
+
+
   refMultCorrectionMode mRefMultCorrMode;
   
   Double_t mdVzMax;

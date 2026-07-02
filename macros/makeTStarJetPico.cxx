@@ -78,6 +78,21 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    trigsim->useOnlineDB();
    trigsim->bemc->setConfig(StBemcTriggerSimu::kOffline);
 
+   // 2026-07-02: SECOND trigger-sim instance in kOnline config (online
+   // pedestals/LUTs = the hardware DSM decision. Its 18 JP patch ADCs are stored
+   // by TStarJetPicoMaker as bit-7 TriggerInfo objects (additive).
+   StTriggerSimuMaker *trigsimHW = new StTriggerSimuMaker("StarTrigSimuOnline");
+   trigsimHW->setMC(false);
+   trigsimHW->useBbc();
+   trigsimHW->useBemc();
+   // useEemc is REQUIRED even for a barrel-only study: with useOnlineDB the
+   // register loader (get2009DsmRegistersFromOnlineDatabase) dereferences
+   // eemc-> unconditionally for the EE101/EE001 DSM dictionary rows ->
+   // segfault in InitRun if absent.
+   trigsimHW->useEemc();
+   trigsimHW->useOnlineDB();
+   trigsimHW->bemc->setConfig(StBemcTriggerSimu::kOnline);
+
    TStarJetPicoMaker *jetPicoMaker = new TStarJetPicoMaker(Form("%s.root", outputName));
    jetPicoMaker->SetInputSource(TStarJetPicoMaker::InputMuDst);
    jetPicoMaker->ProcessMC(0); // 0 = data, 1 = MC; LoadMuDst aborts if MC requested without StMiniMcEvent

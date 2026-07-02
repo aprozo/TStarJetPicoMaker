@@ -112,6 +112,7 @@ ClassImp(TStarJetPicoMaker)
      mPicoDst(nullptr),
      mPicoInputEvent(nullptr),
      mTriggerSimu(nullptr),
+    mTriggerSimuHW(nullptr),
      mStMiniMcEvent(nullptr),
      mEMCPosition(nullptr),
      mBEMCGeom(nullptr),
@@ -328,6 +329,10 @@ void TStarJetPicoMaker::InitMakers()
    }
 
    mTriggerSimu = (StTriggerSimuMaker *)GetMakerInheritsFrom("StTriggerSimuMaker");
+   // 2026-07-02: optional SECOND simulator instance in kOnline config (online
+   // pedestals/LUTs -> reproduces the hardware DSM decision). Looked up
+   // by NAME; absent (e.g. embedding macro) -> feature off, output unchanged.
+   mTriggerSimuHW = (StTriggerSimuMaker *)GetMaker("StarTrigSimuOnline");
    if (mTriggerSimu == nullptr)
       LOG_INFO << "TStarJetPicoMaker: Trigger Simu Maker not present in chain - trigger objects will not be complete"
                << endm;
@@ -408,6 +413,7 @@ Int_t TStarJetPicoMaker::MakeMuDst()
       as well */
    if (!MuProcessBEMC())
       return kStOk;
+
 
    /* process triggers */
    MuProcessTriggerObjects();
@@ -1089,6 +1095,44 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
       trigobj.SetEta(eta);
       trigobj.SetPhi(phi);
       mEvent->AddTrigObj(&trigobj);
+   }
+
+   // 2026-07-02: HARDWARE-equivalent JP patches from the kOnline simulator
+   // instance (see Init). Additive: stored as EXTRA TriggerInfo objects marked
+   // with bit 7; the kOffline objects above are byte-identical to before.
+   // Family bits 4/5/6 are set from the ONLINE-instance thresholds. Patches
+   // kept down to (JP0 th - 2) so any register-offset study can re-gate
+   // downstream without another pico production.
+   if (mTriggerSimuHW != nullptr && mTriggerSimuHW->bemc != nullptr) {
+      const Int_t jp0o = mTriggerSimuHW->bemc->barrelJetPatchTh(0);
+      const Int_t jp1o = mTriggerSimuHW->bemc->barrelJetPatchTh(1);
+      const Int_t jp2o = mTriggerSimuHW->bemc->barrelJetPatchTh(2);
+      for (unsigned jp = 0; jp < 18; ++jp) {
+         const Int_t jpAdc = mTriggerSimuHW->bemc->barrelJetPatchAdc(jp);
+         if (jp0o <= 0 || jpAdc <= jp0o - 2)
+            continue;
+         std::bitset<32> trigMap;
+         trigMap.set(7);
+         if (jpAdc > jp0o) trigMap.set(4);
+         if (jp1o > 0 && jpAdc > jp1o) trigMap.set(5);
+         if (jp2o > 0 && jpAdc > jp2o) trigMap.set(6);
+         float eta;
+         if (jp < 6)
+            eta = 0.5f;
+         else if (jp < 12)
+            eta = -0.5f;
+         else
+            eta = -0.1f;
+         const int j = jp % 6;
+         const float phi = TVector2::Phi_mpi_pi((150.0 - j * 60.0) * TMath::DegToRad());
+         trigobj.Clear();
+         trigobj.SetId(jp);
+         trigobj.SetADC(jpAdc);
+         trigobj.SetBitMap(trigMap);
+         trigobj.SetEta(eta);
+         trigobj.SetPhi(phi);
+         mEvent->AddTrigObj(&trigobj);
+      }
    }
 }
 
