@@ -143,10 +143,7 @@ void makeTStarJetPicoEmbedding(const char *filelist = "lists/test.list", const c
    jetPicoMaker->SetTrackDCAMax(3.0);
    jetPicoMaker->SetTrackFlagMin(0);
 
-   // No AddTrigger() — embedding overlays sit on st_zerobias_adc events whose
-   // hardware trigger IDs do not include JP0/1/2. StTriggerSimuMaker populates
-   // simu trigger info on every event; the JP gate is applied later in
-   // jets_pp_2012 (ppAnalysis simu_fired check).
+   jetPicoMaker->SetTrackLastPointMin(125.0);
 
    if (chain->Init()) {
       std::cout << "StChain failed init: exiting" << std::endl;
