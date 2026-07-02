@@ -3,10 +3,7 @@
 //  a tree of TStarJetPicoEvents
 
 //  this macro produces TStarJetPicoEvents from STAR muDSTs.
-//  Requires the STAR libraries & muDST files. Defaults
-//  are set to a test production using the test.list file
-//  ( 10 files located on distributed disk from y14 high
-//  luminosity production )
+//  Requires the STAR libraries & muDST files.
 
 void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outputName = "test")
 {
@@ -78,7 +75,7 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    trigsim->useOnlineDB();
    trigsim->bemc->setConfig(StBemcTriggerSimu::kOffline);
 
-   // 2026-07-02: SECOND trigger-sim instance in kOnline config (online
+   // SECOND trigger-sim instance in kOnline config (online
    // pedestals/LUTs = the hardware DSM decision. Its 18 JP patch ADCs are stored
    // by TStarJetPicoMaker as bit-7 TriggerInfo objects (additive).
    StTriggerSimuMaker *trigsimHW = new StTriggerSimuMaker("StarTrigSimuOnline");
@@ -99,32 +96,28 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    // jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::VpdOrRank);
    jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::Rank);
    jetPicoMaker->SetTowerAcceptMode(
-      TStarJetPicoMaker::RejectBadTowerStatus); // matches Dmitry's StjTowerEnergyCutBemcStatus(1)
+      TStarJetPicoMaker::RejectBadTowerStatus); 
    jetPicoMaker->SetStRefMultCorrMode(TStarJetPicoMaker::FillNone);
-   // Vz: kept at ±80 here; the production analysis (ppAnalysis::VzCut) tightens to ±60 to match Dmitry.
+
+   //jetPicoMaker->SetUseEemc(true);
+
    jetPicoMaker->EventCuts()->SetVzRange(-80, 80);
    jetPicoMaker->EventCuts()->SetRefMultRange(0, 7000);
-   // Tower ET threshold: Dmitry uses 0.20 GeV (StjTowerEnergyCutEt(0.2)); raised from 0.15 to match.
-   // Note: existing picos produced with 0.15 will need re-production to gain the tighter cut.
    jetPicoMaker->SetTowerEnergyMin(0.20);
-   // Per-tower ADC quality cut, mirrors Dmitry's StjTowerEnergyCutAdc(4, 3):
+   // Per-tower ADC quality cut
    //   require (ADC - pedestal) > 4 AND (ADC - pedestal) > 3·RMS.
    // Hot-tower handling layered with the DB tower-status flag (BTOW status != 1)
    // already checked via SetTowerAcceptMode(RejectBadTowerStatus) above; this
    // ADC cut filters transient pedestal-noise spikes that pass the energy
    // threshold but lack real signal.
    jetPicoMaker->SetTowerAdcCut(4, 3.0);
-   // Tracks: |η|<2.5, FitPointMin=12 (Dmitry's NHits>=12), DCA<=3 cm. Stage B (RunppAna) re-applies the same.
    jetPicoMaker->SetTrackEtaRange(-2.5, 2.5);
    jetPicoMaker->SetTrackFitPointMin(12);
    jetPicoMaker->SetTrackDCAMax(3.0);
    jetPicoMaker->SetTrackFlagMin(0);
-   // Dmitry's StjTrackCutLastPoint(125): reject tracks with last-fit-point r<=125.
-   // Applied at production; no schema change to TStarJetPicoPrimaryTrack required.
    jetPicoMaker->SetTrackLastPointMin(125.0);
 
    jetPicoMaker->EventCuts()->AddTrigger(370531); // HT2
-
    jetPicoMaker->EventCuts()->AddTrigger(370601); // JP0
    jetPicoMaker->EventCuts()->AddTrigger(370611); // JP1
    jetPicoMaker->EventCuts()->AddTrigger(370621); // JP2
