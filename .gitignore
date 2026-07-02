@@ -60,6 +60,7 @@ cleanupScratch.csh
 jetPicoProduction.xml
 MakeTStarJetPico.cxx
 MakeTStarJetPicoOldMaker.cxx
+*RootDict.cxx
 
 # condor file
 CondorFile
