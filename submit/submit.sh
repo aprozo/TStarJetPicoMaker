@@ -44,6 +44,8 @@ starVersion="pro"
 # `${2-…}` (no colon) defaults ONLY when $2 is unset. Passing an empty string ""
 # explicitly means "skip the actual submit" — used for dry-runs.
 submitCmd="${2-star-submit}"
+# -- macro config (trigger set): ALL | JPHT | MB
+macroConfig="${3:-ALL}"
 
 #================================================================
 # -- submission xml file
@@ -113,6 +115,7 @@ cat <<EOF >"${generatedXml}"
 <!ENTITY listOfFiles "${listOfFiles}">
 <!ENTITY starVersion "${starVersion}">
 <!ENTITY listBasename "${listBasename}">
+<!ENTITY macroConfig "${macroConfig}">
 ]>
 
 EOF

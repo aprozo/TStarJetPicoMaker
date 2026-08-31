@@ -20,7 +20,7 @@
     starver &starVersion;
     ls -ltrh **
     # $INPUTFILE0 is one entry from list_of_lists.list — i.e. a path to a per-bin
-    # .list file (e.g. lists/pt_hat1115_000.list). The macro reads that and
+    # .list file (e.g. lists/emb2023/chunks/pt_hat1115_000.list). The macro reads that and
     # derives the corresponding minimc.root paths.
     set sublist = "$INPUTFILE0"
     set basename = `basename $sublist .list`
