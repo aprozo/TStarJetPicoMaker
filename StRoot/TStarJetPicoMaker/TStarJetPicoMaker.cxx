@@ -1298,8 +1298,19 @@ Bool_t TStarJetPicoMaker::MuFillHeader()
    mEvent->GetHeader()->SetZdcWestRate(mMuInputEvent->runInfo().zdcWestRate());
    mEvent->GetHeader()->SetZdcEastRate(mMuInputEvent->runInfo().zdcEastRate());
    mEvent->GetHeader()->SetZdcCoincidenceRate(mMuInputEvent->runInfo().zdcCoincidenceRate());
-   mEvent->GetHeader()->SetnumberOfVpdEastHits(mMuInputEvent->numberOfVpdEastHits());
-   mEvent->GetHeader()->SetnumberOfVpdWestHits(mMuInputEvent->numberOfVpdWestHits());
+   // VPD hit multiplicities: read from the OFFLINE btofHeader (real per-side hit
+   // counts, populated from the underlying event) rather than StMuEvent's
+   // trigger-level numberOfVpd{East,West}Hits(), which is ZEROED in the embedding
+   // trigger simulation. btofHeader()->numberOfVpdHits(east/west) carries the real
+   // VPD response (of the underlying zerobias event in embedding), enabling the MB
+   // VPD/vertex study. east=0, west=1 (StEnumerations::StBeamDirection).
+   if (StBTofHeader *btofHdr = mMuDst->btofHeader()) {
+      mEvent->GetHeader()->SetnumberOfVpdEastHits(btofHdr->numberOfVpdHits(east));
+      mEvent->GetHeader()->SetnumberOfVpdWestHits(btofHdr->numberOfVpdHits(west));
+   } else {
+      mEvent->GetHeader()->SetnumberOfVpdEastHits(0);
+      mEvent->GetHeader()->SetnumberOfVpdWestHits(0);
+   }
    mEvent->GetHeader()->SetBbcWestRate(mMuInputEvent->runInfo().bbcWestRate());
    mEvent->GetHeader()->SetBbcEastRate(mMuInputEvent->runInfo().bbcEastRate());
    mEvent->GetHeader()->SetBbcCoincidenceRate(mMuInputEvent->runInfo().bbcCoincidenceRate());
