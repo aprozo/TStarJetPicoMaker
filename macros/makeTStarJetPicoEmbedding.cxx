@@ -124,7 +124,7 @@ void makeTStarJetPicoEmbedding(const char *filelist = "lists/test.list", const c
    trigsim->useEemc();
    trigsim->useBbc();
    trigsim->useOnlineDB();
-   trigsim->bemc->setConfig(StBemcTriggerSimu::kOffline);
+   trigsim->bemc->setConfig(StBemcTriggerSimu::kOnline);
 
    TStarJetPicoMaker *jetPicoMaker =
       new TStarJetPicoMaker(Form("%s.root", outputName), mcChain, 1, outputName, nFiles, trigSet);
