@@ -1,11 +1,14 @@
 
-//  Example of how to use TStarJetPicoMaker to produce
-//  a tree of TStarJetPicoEvents
+//  DATA pico production — ONE macro for every stream. config selects the
+//  trigger set: "JPHT" (HT2+JP0/1/2, tower-trigger folder), "MB"
+//  (370001+370011, min-bias folder) or "ALL" (all six). The two-folder
+//  split keeps each downstream analysis reading only its own stream.
+//  vz +-80, highest-rank vertex, all other selection at Stage-2.
+//  Trigger sim: kOnline (hardware DSM ruler), same config as the embedding
+//  macro — one consistent ruler, no C(pT) needed downstream.
 
-//  this macro produces TStarJetPicoEvents from STAR muDSTs.
-//  Requires the STAR libraries & muDST files.
-
-void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outputName = "test")
+void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outputName = "test",
+                      const char *config = "ALL")
 {
    const int nEvents = 1e9;
    const int nFiles = 1e9;
@@ -66,29 +69,17 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
 
    cout << "DEBUG B" << endl;
 
-   // simulates a trigger response based on an ADC value & trigger definitions
    StTriggerSimuMaker *trigsim = new StTriggerSimuMaker();
-   trigsim->setMC(false); // CHANGE IF GOING BACK TO DATA!!
+   trigsim->setMC(false);
    trigsim->useBemc();
    trigsim->useEemc();
    trigsim->useBbc();
    trigsim->useOnlineDB();
-   trigsim->bemc->setConfig(StBemcTriggerSimu::kOffline);
-
-   // SECOND trigger-sim instance in kOnline config (online
-   // pedestals/LUTs = the hardware DSM decision. Its 18 JP patch ADCs are stored
-   // by TStarJetPicoMaker as bit-7 TriggerInfo objects (additive).
-   StTriggerSimuMaker *trigsimHW = new StTriggerSimuMaker("StarTrigSimuOnline");
-   trigsimHW->setMC(false);
-   trigsimHW->useBbc();
-   trigsimHW->useBemc();
+   trigsim->bemc->setConfig(StBemcTriggerSimu::kOnline);
    // useEemc is REQUIRED even for a barrel-only study: with useOnlineDB the
    // register loader (get2009DsmRegistersFromOnlineDatabase) dereferences
    // eemc-> unconditionally for the EE101/EE001 DSM dictionary rows ->
    // segfault in InitRun if absent.
-   trigsimHW->useEemc();
-   trigsimHW->useOnlineDB();
-   trigsimHW->bemc->setConfig(StBemcTriggerSimu::kOnline);
 
    TStarJetPicoMaker *jetPicoMaker = new TStarJetPicoMaker(Form("%s.root", outputName));
    jetPicoMaker->SetInputSource(TStarJetPicoMaker::InputMuDst);
@@ -117,14 +108,19 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    jetPicoMaker->SetTrackFlagMin(0);
    jetPicoMaker->SetTrackLastPointMin(125.0);
 
-   jetPicoMaker->EventCuts()->AddTrigger(370531); // HT2
-   jetPicoMaker->EventCuts()->AddTrigger(370601); // JP0
-   jetPicoMaker->EventCuts()->AddTrigger(370611); // JP1
-   jetPicoMaker->EventCuts()->AddTrigger(370621); // JP2
+   const TString cfg(config);
+   if (cfg == "ALL" || cfg == "JPHT") {
+      jetPicoMaker->EventCuts()->AddTrigger(370531); // HT2
+      jetPicoMaker->EventCuts()->AddTrigger(370601); // JP0
+      jetPicoMaker->EventCuts()->AddTrigger(370611); // JP1
+      jetPicoMaker->EventCuts()->AddTrigger(370621); // JP2
+   }
    // jetPicoMaker->EventCuts()->AddTrigger(370982); // JP2*L2JetHigh
    // jetPicoMaker->EventCuts()->AddTrigger(370641); // AJP
-   // jetPicoMaker->EventCuts()->AddTrigger(370001); // VPDMB
-   // jetPicoMaker->EventCuts()->AddTrigger(370011); // VPDMB-nobsmd
+   if (cfg == "ALL" || cfg == "MB") {
+      jetPicoMaker->EventCuts()->AddTrigger(370001); // VPDMB
+      jetPicoMaker->EventCuts()->AddTrigger(370011); // VPDMB-nobsmd
+   }
    // jetPicoMaker->EventCuts()->AddTrigger(370021); // BBCMB
    // jetPicoMaker->EventCuts()->AddTrigger(370022); // BBCMB
 

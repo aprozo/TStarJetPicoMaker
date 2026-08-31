@@ -1219,6 +1219,13 @@ void TStarJetPicoMaker::MuProcessTriggerObjects()
          mEvent->AddTrigObj(&trigobj);
       }
    }
+   for (int tid : {370531, 370601, 370611, 370621}) {
+      trigobj.Clear();
+      trigobj.SetId(tid);
+      trigobj.SetADC(mTriggerSimu->isTrigger(tid) ? 1 : 0);
+      trigobj.SetBit(8, true);
+      mEvent->AddTrigObj(&trigobj);
+   }
 }
 
 void TStarJetPicoMaker::PicoProcessTriggerObjects() {}

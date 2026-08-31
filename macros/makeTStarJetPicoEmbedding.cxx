@@ -1,4 +1,6 @@
 //  Embedding pico production for pp200 GeV Run-12.
+//  Trigger sim: kOnline (hardware DSM ruler) — the SAME config as the data
+//  macros, so no measured trigger-efficiency correction is needed downstream.
 //  Differs from makeTStarJetPico.cxx (data) in:
 //    - reads StMiniMcTree alongside MuDst (mcChain via getMiniMcFromMuDstList)
 //    - constructs TStarJetPicoMaker with the (mcChain, …) overload
@@ -6,7 +8,8 @@
 //    - cuts kept aligned with Dmitry where applicable (same as the data
 //      macro): TowerEnergyMin=0.20, SetTowerAdcCut(4, 3.0),
 //      TrackFitPointMin=12, |η_track|<2.5, DCA<3 cm
-//    - Vz tightened to ±30 (embedding overlay always has narrow vertex range)
+//    - Vz kept at ±80: the embedding vertex was thrown with σ_z = 45 cm,
+//      offset -1.1 cm (GenerateVertex.C in request 20212001/20235003)
 
 #include <iostream>
 #include <fstream>
@@ -124,7 +127,7 @@ void makeTStarJetPicoEmbedding(const char *filelist = "lists/test.list", const c
    trigsim->useEemc();
    trigsim->useBbc();
    trigsim->useOnlineDB();
-   trigsim->bemc->setConfig(StBemcTriggerSimu::kOnline);
+   trigsim->bemc->setConfig(StBemcTriggerSimu::kOnline); // hardware DSM ruler, same as the data macros
 
    TStarJetPicoMaker *jetPicoMaker =
       new TStarJetPicoMaker(Form("%s.root", outputName), mcChain, 1, outputName, nFiles, trigSet);
