@@ -1,0 +1,6 @@
+st_zerobias_adc_13048093_raw_3580001_r2.MuDst.root
+st_zerobias_adc_13061035_raw_1590001_r2.MuDst.root
+st_zerobias_adc_13061035_raw_3600001_r0.MuDst.root
+st_zerobias_adc_13068037_raw_5580001_r0.MuDst.root
+st_zerobias_adc_13068037_raw_5580001_r1.MuDst.root
+st_zerobias_adc_13068037_raw_5580001_r2.MuDst.root
