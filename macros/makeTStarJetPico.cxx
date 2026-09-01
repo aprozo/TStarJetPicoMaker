@@ -6,6 +6,9 @@
 //  vz +-80, highest-rank vertex, all other selection at Stage-2.
 //  Trigger sim: kOnline (hardware DSM ruler), same config as the embedding
 //  macro — one consistent ruler, no C(pT) needed downstream.
+#include <iostream>
+#include <fstream>
+#include <string>
 
 void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outputName = "test",
                       const char *config = "ALL")
@@ -38,14 +41,14 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    gSystem->Load("StPicoEvent.so");
    gSystem->Load("StPicoDstMaker.so");
 
-   gSystem->AddDynamicPath("./libs/"); // add local libs to path
+   gSystem->AddDynamicPath("./libs/");
    gSystem->Load("libStRefMultCorr.so");
    gSystem->Load("libTStarJetPico.so");
    gSystem->Load("libTStarJetPicoMaker.so");
 
    // Internal log suppression (no stream splitting):
    //   1) drop the TRefTable::Add "SetParent must be called" spam
-   //   2) silence StTriggerSimuMaker INFO chatter
+   //   2) silence StTriggerSimuMaker INFO
    TStarJetPicoMaker::SuppressTRefTableNoise();
    TStarJetPicoMaker::SetLoggerLevel("StTriggerSimuMaker", "WARN");
 
@@ -54,20 +57,16 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    StMuDstMaker *muDstMaker = new StMuDstMaker(0, 0, "", filelist, "", nFiles);
 
    St_db_Maker *dbMaker = new St_db_Maker("StarDb", "MySQL:StarDb");
-   // StMiniMcMaker* mcMaker = new StMiniMcMaker();
    StEEmcDbMaker *eemcb = new StEEmcDbMaker("eemcDb");
    StEmcADCtoEMaker *adc = new StEmcADCtoEMaker();
    StPreEclMaker *pre_ecl = new StPreEclMaker();
    StEpcMaker *epc = new StEpcMaker();
 
-   // get control table so we can turn off BPRS zero-suppression and save hits from "bad" caps
    controlADCtoE_st *control_table = adc->getControlTable();
    control_table->CutOff[1] = -1;
    control_table->CutOffType[1] = 0;
    control_table->DeductPedestal[1] = 2;
    adc->saveAllStEvent(kTRUE);
-
-   cout << "DEBUG B" << endl;
 
    StTriggerSimuMaker *trigsim = new StTriggerSimuMaker();
    trigsim->setMC(false);
@@ -75,23 +74,19 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    trigsim->useEemc();
    trigsim->useBbc();
    trigsim->useOnlineDB();
-   trigsim->bemc->setConfig(StBemcTriggerSimu::kOnline);
+   trigsim->bemc->setConfig(StBemcTriggerSimu::kOnline); // hardware DSM ruler, same as the data macros
    // useEemc is REQUIRED even for a barrel-only study: with useOnlineDB the
    // register loader (get2009DsmRegistersFromOnlineDatabase) dereferences
    // eemc-> unconditionally for the EE101/EE001 DSM dictionary rows ->
    // segfault in InitRun if absent.
-
    TStarJetPicoMaker *jetPicoMaker = new TStarJetPicoMaker(Form("%s.root", outputName));
    jetPicoMaker->SetInputSource(TStarJetPicoMaker::InputMuDst);
    jetPicoMaker->ProcessMC(0); // 0 = data, 1 = MC; LoadMuDst aborts if MC requested without StMiniMcEvent
    // jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::VpdOrRank);
    jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::Rank);
-   jetPicoMaker->SetTowerAcceptMode(
-      TStarJetPicoMaker::RejectBadTowerStatus); 
+   jetPicoMaker->SetTowerAcceptMode(TStarJetPicoMaker::RejectBadTowerStatus);
    jetPicoMaker->SetStRefMultCorrMode(TStarJetPicoMaker::FillNone);
-
    //jetPicoMaker->SetUseEemc(true);
-
    jetPicoMaker->EventCuts()->SetVzRange(-80, 80);
    jetPicoMaker->EventCuts()->SetRefMultRange(0, 7000);
    jetPicoMaker->SetTowerEnergyMin(0.20);
@@ -115,8 +110,7 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
       jetPicoMaker->EventCuts()->AddTrigger(370611); // JP1
       jetPicoMaker->EventCuts()->AddTrigger(370621); // JP2
    }
-   // jetPicoMaker->EventCuts()->AddTrigger(370982); // JP2*L2JetHigh
-   // jetPicoMaker->EventCuts()->AddTrigger(370641); // AJP
+
    if (cfg == "ALL" || cfg == "MB") {
       jetPicoMaker->EventCuts()->AddTrigger(370001); // VPDMB
       jetPicoMaker->EventCuts()->AddTrigger(370011); // VPDMB-nobsmd
@@ -124,27 +118,20 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
    // jetPicoMaker->EventCuts()->AddTrigger(370021); // BBCMB
    // jetPicoMaker->EventCuts()->AddTrigger(370022); // BBCMB
 
-   cout << "DEBUG C" << endl;
 
    if (chain->Init()) {
-      cout << "StChain failed init: exiting" << endl;
+      std::cout << "StChain failed init: exiting" << std::endl;
       return;
    }
-   cout << "chain initialized" << endl;
 
    TStopwatch total;
    TStopwatch timer;
-
    int i = 0;
-   cout << "DEBUG E" << endl;
    while (i < nEvents && chain->Make() == kStOk) {
-      // cout << "DEBUG F" << endl;
       if (i % 500 == 0) {
-         cout << "done with event " << i;
-         cout << "\tcpu: " << timer.CpuTime() << "\treal: " << timer.RealTime()
-              << "\tratio: " << timer.CpuTime() / timer.RealTime(); //<<endl;
+         std::cout << "done with event " << i << "\tcpu: " << timer.CpuTime() << "\treal: " << timer.RealTime()
+                   << "\tratio: " << timer.CpuTime() / timer.RealTime();
          timer.Start();
-         // memory.PrintMem( NULL );
       }
       i++;
       chain->Clear();
@@ -152,13 +139,7 @@ void makeTStarJetPico(const char *filelist = "lists/test.list", const char *outp
 
    chain->ls(3);
    chain->Finish();
-   printf("my macro processed %i events", i);
-   cout << "\tcpu: " << total.CpuTime() << "\treal: " << total.RealTime()
-        << "\tratio: " << total.CpuTime() / total.RealTime() << endl;
-
-   cout << endl;
-   cout << "-------------" << endl;
-   cout << "(-: Done :-) " << endl;
-   cout << "-------------" << endl;
-   cout << endl;
+   std::cout << "processed " << i << " events"
+             << "\tcpu: " << total.CpuTime() << "\treal: " << total.RealTime() << std::endl;
+   std::cout << "-------------\n(-: Done :-)\n-------------" << std::endl;
 }

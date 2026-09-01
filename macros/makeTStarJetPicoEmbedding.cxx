@@ -66,7 +66,7 @@ void makeTStarJetPicoEmbedding(const char *filelist = "lists/test.list", const c
    const int nEvents = 1e9;
    const int nFiles = 1e9;
    const int trigSet = 0;
-
+   // load STAR libraries
    gROOT->Macro("LoadLogger.C");
    gROOT->Macro("loadMuDst.C");
    gSystem->Load("StarMagField.so");
@@ -96,6 +96,9 @@ void makeTStarJetPicoEmbedding(const char *filelist = "lists/test.list", const c
    gSystem->Load("libTStarJetPico.so");
    gSystem->Load("libTStarJetPicoMaker.so");
 
+   // Internal log suppression (no stream splitting):
+   //   1) drop the TRefTable::Add "SetParent must be called" spam
+   //   2) silence StTriggerSimuMaker INFO
    TStarJetPicoMaker::SuppressTRefTableNoise();
    TStarJetPicoMaker::SetLoggerLevel("StTriggerSimuMaker", "WARN");
 
@@ -128,24 +131,31 @@ void makeTStarJetPicoEmbedding(const char *filelist = "lists/test.list", const c
    trigsim->useBbc();
    trigsim->useOnlineDB();
    trigsim->bemc->setConfig(StBemcTriggerSimu::kOnline); // hardware DSM ruler, same as the data macros
-
-   TStarJetPicoMaker *jetPicoMaker =
-      new TStarJetPicoMaker(Form("%s.root", outputName), mcChain, 1, outputName, nFiles, trigSet);
+   // useEemc is REQUIRED even for a barrel-only study: with useOnlineDB the
+   // register loader (get2009DsmRegistersFromOnlineDatabase) dereferences
+   // eemc-> unconditionally for the EE101/EE001 DSM dictionary rows ->
+   // segfault in InitRun if absent.
+   TStarJetPicoMaker *jetPicoMaker = new TStarJetPicoMaker(Form("%s.root", outputName), mcChain, 1, outputName, nFiles, trigSet);
    jetPicoMaker->ProcessMC(1);
    // jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::VpdOrRank);
    jetPicoMaker->SetVertexSelector(TStarJetPicoMaker::Rank);
    jetPicoMaker->SetTowerAcceptMode(TStarJetPicoMaker::RejectBadTowerStatus);
    jetPicoMaker->SetStRefMultCorrMode(TStarJetPicoMaker::FillNone);
+   //jetPicoMaker->SetUseEemc(true);
    jetPicoMaker->EventCuts()->SetVzRange(-80, 80);
    jetPicoMaker->EventCuts()->SetRefMultRange(0, 7000);
-   // Dmitry-aligned cuts:
    jetPicoMaker->SetTowerEnergyMin(0.20);
+   // Per-tower ADC quality cut
+   //   require (ADC - pedestal) > 4 AND (ADC - pedestal) > 3·RMS.
+   // Hot-tower handling layered with the DB tower-status flag (BTOW status != 1)
+   // already checked via SetTowerAcceptMode(RejectBadTowerStatus) above; this
+   // ADC cut filters transient pedestal-noise spikes that pass the energy
+   // threshold but lack real signal.
    jetPicoMaker->SetTowerAdcCut(4, 3.0);
    jetPicoMaker->SetTrackEtaRange(-2.5, 2.5);
    jetPicoMaker->SetTrackFitPointMin(12);
    jetPicoMaker->SetTrackDCAMax(3.0);
    jetPicoMaker->SetTrackFlagMin(0);
-
    jetPicoMaker->SetTrackLastPointMin(125.0);
 
    if (chain->Init()) {
@@ -162,7 +172,7 @@ void makeTStarJetPicoEmbedding(const char *filelist = "lists/test.list", const c
                    << "\tratio: " << timer.CpuTime() / timer.RealTime();
          timer.Start();
       }
-      ++i;
+      i++;
       chain->Clear();
    }
 
